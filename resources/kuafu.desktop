@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=kuafu
+Comment=PDF Manager
+Exec=kuafu %f
+Icon=kuafu
+Categories= Office;
+Terminal=false
+StartupNotify=false

@@ -1,0 +1,406 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>window</class>
+ <widget class="QMainWindow" name="window">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>905</width>
+    <height>722</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>kuafu</string>
+  </property>
+  <property name="windowIcon">
+   <iconset resource="resources.qrc">
+    <normaloff>:/icons/kuafu.svg</normaloff>:/icons/kuafu.svg</iconset>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout_2">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QTabWidget" name="centraltabwidget">
+      <property name="tabBarAutoHide">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>905</width>
+     <height>30</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>&amp;File</string>
+    </property>
+    <widget class="QMenu" name="menuExport">
+     <property name="title">
+      <string>Export</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>:/icons/export.png</normaloff>:/icons/export.png</iconset>
+     </property>
+     <addaction name="pageToImageAction"/>
+     <addaction name="toPSAction"/>
+    </widget>
+    <widget class="QMenu" name="menuRecentFiles">
+     <property name="title">
+      <string>Recent Files</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>:/icons/recents.png</normaloff>:/icons/recents.png</iconset>
+     </property>
+    </widget>
+    <addaction name="openFileAction"/>
+    <addaction name="menuRecentFiles"/>
+    <addaction name="menuExport"/>
+    <addaction name="printAction"/>
+    <addaction name="docInfoAction"/>
+    <addaction name="quitAction"/>
+   </widget>
+   <widget class="QMenu" name="menuNavigate">
+    <property name="title">
+     <string>Navigate</string>
+    </property>
+    <addaction name="undoJumpAction"/>
+    <addaction name="prevPageAction"/>
+    <addaction name="nextPageAction"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>&amp;View</string>
+    </property>
+    <addaction name="zoominAction"/>
+    <addaction name="zoomoutAction"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuView"/>
+   <addaction name="menuNavigate"/>
+  </widget>
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <property name="allowedAreas">
+    <set>Qt::BottomToolBarArea|Qt::TopToolBarArea</set>
+   </property>
+   <property name="floatable">
+    <bool>false</bool>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+  <action name="openFileAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/document-open.svg</normaloff>:/icons/document-open.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Open</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="quitAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/im-ban-kick-user.svg</normaloff>:/icons/im-ban-kick-user.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Quit</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
+   </property>
+  </action>
+  <action name="zoominAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/zoom-in.svg</normaloff>:/icons/zoom-in.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom In</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl++</string>
+   </property>
+  </action>
+  <action name="zoomoutAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/zoom-out.svg</normaloff>:/icons/zoom-out.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom Out</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+-</string>
+   </property>
+  </action>
+  <action name="prevPageAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/go-up.svg</normaloff>:/icons/go-up.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Prev Page</string>
+   </property>
+   <property name="shortcut">
+    <string>Left</string>
+   </property>
+  </action>
+  <action name="nextPageAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/go-down.svg</normaloff>:/icons/go-down.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Next Page</string>
+   </property>
+   <property name="shortcut">
+    <string>Right</string>
+   </property>
+  </action>
+  <action name="undoJumpAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/go-previous.svg</normaloff>:/icons/go-previous.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Undo Jump</string>
+   </property>
+   <property name="toolTip">
+    <string>Undo Jump</string>
+   </property>
+   <property name="shortcut">
+    <string>Shift+Backspace</string>
+   </property>
+  </action>
+  <action name="saveFileAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/document-save.svg</normaloff>:/icons/document-save.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Save</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+  </action>
+  <action name="toPSAction">
+   <property name="icon">
+    <iconset>
+     <normaloff>:/icons/adobe.png</normaloff>:/icons/adobe.png</iconset>
+   </property>
+   <property name="text">
+    <string>to PostScript</string>
+   </property>
+  </action>
+  <action name="docInfoAction">
+   <property name="icon">
+    <iconset>
+     <normaloff>:/icons/info.png</normaloff>:/icons/info.png</iconset>
+   </property>
+   <property name="text">
+    <string>Document Info</string>
+   </property>
+  </action>
+  <action name="pageToImageAction">
+   <property name="icon">
+    <iconset>
+     <normaloff>:/icons/image.png</normaloff>:/icons/image.png</iconset>
+   </property>
+   <property name="text">
+    <string>Page to Image</string>
+   </property>
+  </action>
+  <action name="printAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/document-print.svg</normaloff>:/icons/document-print.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Print</string>
+   </property>
+   <property name="toolTip">
+    <string>Print with QuikPrint</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+P</string>
+   </property>
+  </action>
+  <action name="pageCountAction">
+   <property name="text">
+    <string>0</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+G</string>
+   </property>
+  </action>
+  <action name="redoJumpAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/go-next.svg</normaloff>:/icons/go-next.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Redo Jump</string>
+   </property>
+   <property name="toolTip">
+    <string>Redo Jump</string>
+   </property>
+   <property name="shortcut">
+    <string>Shift+Backspace</string>
+   </property>
+  </action>
+  <action name="zoomFitwidthAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/zoom-fit-width.svg</normaloff>:/icons/zoom-fit-width.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom Fit Width</string>
+   </property>
+   <property name="toolTip">
+    <string>Zoom Fit Width</string>
+   </property>
+  </action>
+  <action name="undoModificationAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/edit-undo.svg</normaloff>:/icons/edit-undo.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Undo Modification</string>
+   </property>
+   <property name="toolTip">
+    <string>Undo Modification</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Z</string>
+   </property>
+  </action>
+  <action name="redoModificationAction">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/edit-redo.svg</normaloff>:/icons/edit-redo.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Redo Modification</string>
+   </property>
+   <property name="toolTip">
+    <string>Redo Modification</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Y</string>
+   </property>
+  </action>
+  <action name="actionFind">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/edit-find.svg</normaloff>:/icons/edit-find.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Find</string>
+   </property>
+   <property name="toolTip">
+    <string>Find</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+F</string>
+   </property>
+  </action>
+  <action name="actionViewInOneColumn">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/snap-page.svg</normaloff>:/icons/snap-page.svg</iconset>
+   </property>
+   <property name="text">
+    <string>View In One Column</string>
+   </property>
+   <property name="toolTip">
+    <string>View In One Column</string>
+   </property>
+  </action>
+  <action name="actionViewInTwoColumns">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/view-pages-facing.svg</normaloff>:/icons/view-pages-facing.svg</iconset>
+   </property>
+   <property name="text">
+    <string>View In Two Columns</string>
+   </property>
+   <property name="toolTip">
+    <string>View In Two Columns</string>
+   </property>
+  </action>
+  <action name="actionPrecedingEmptyPage">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/page-simple.svg</normaloff>:/icons/page-simple.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Preceding Empty Page</string>
+   </property>
+   <property name="toolTip">
+    <string>Preceding Empty Page</string>
+   </property>
+  </action>
+  <action name="actionViewInFourColumns">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/view-pages-overview.svg</normaloff>:/icons/view-pages-overview.svg</iconset>
+   </property>
+   <property name="text">
+    <string>View In Four Columns</string>
+   </property>
+   <property name="toolTip">
+    <string>View In Four Columns</string>
+   </property>
+  </action>
+ </widget>
+ <resources>
+  <include location="resources.qrc"/>
+ </resources>
+ <connections/>
+</ui>
