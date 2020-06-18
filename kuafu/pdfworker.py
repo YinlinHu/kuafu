@@ -1,19 +1,31 @@
 from PyQt5 import QtCore
 from PyQt5 import QtGui
 
-# import fitz # PyMuPDF
-from popplerqt5 import Poppler
+# https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
+# MuPDF is much faster, but also use more memories
+BACKEND_MuPDF = True
+
+if BACKEND_MuPDF:
+    import fitz
+else: 
+    from popplerqt5 import Poppler
+
+from multiprocessing import Process
 
 from utils import debug
 import time
 
-class PdfRender(QtCore.QThread):
-    # considering realtime, the request may be dropped
-    rendered = QtCore.pyqtSignal(str, int, float, QtGui.QImage)
+class PdfRender(Process):
 
-    def __init__(self):
+    # considering realtime, the request may be dropped
+    # rendered = QtCore.pyqtSignal(str, int, float, QtGui.QImage)
+
+    def __init__(self, commandQ, resultsQ):
         super(PdfRender, self).__init__()
         #
+        self.commandQ = commandQ
+        self.resultsQ = resultsQ
+
         self.doc = None
         self.filename = None
         # 
@@ -21,36 +33,28 @@ class PdfRender(QtCore.QThread):
         self.link_color = QtGui.QColor(0,0,127, 40)
         self.exit_flag = False
 
-        self.visible_pages = []
-
         self.requests_list = []
         self.requests_params = []
-        self.mutex = QtCore.QMutex()
+        # self.mutex = QtCore.QMutex()
 
     def set_document(self, filename):
         self.filename = filename
-        password = ""
-        self.doc = Poppler.Document.load(self.filename, password.encode(), password.encode())
-        self.doc.setRenderHint(
-            Poppler.Document.TextAntialiasing
-            | Poppler.Document.TextHinting
-            | Poppler.Document.Antialiasing
-            )
-        # self.doc = fitz.open(filename)
 
-    def stop_async(self):
-        self.exit_flag = True
-
-    def set_visible_pages(self, visible_pages):
-        self.visible_pages = visible_pages
-
-    def render_async(self, page_no, dpi):
-        # call by main thread
-        # remove duplicate
-        self.mutex.lock()
-
-        index = self.requests_list.index(page_no) if page_no in self.requests_list else -1
-        if index >= 0:
+        if BACKEND_MuPDF:
+            self.doc = fitz.open(filename)
+        else:
+            password = ""
+            self.doc = Poppler.Document.load(self.filename, password.encode(), password.encode())
+            self.doc.setRenderHint(
+                Poppler.Document.TextAntialiasing
+                | Poppler.Document.TextHinting
+                | Poppler.Document.Antialiasing
+                )
+                
+    def save_rendering_command(self, page_no, dpi, visible_pages):
+        # remove old duplicated
+        if page_no in self.requests_list:
+            index = self.requests_list.index(page_no)
             self.requests_list.pop(index)
             self.requests_params.pop(index)
         # 
@@ -63,49 +67,72 @@ class PdfRender(QtCore.QThread):
             new_request_list = []
             new_request_params = []
             for idx in range(candi_num):
-                if self.requests_list[idx] in self.visible_pages:
+                if self.requests_list[idx] in visible_pages:
                     new_request_list.append(self.requests_list[idx])
                     new_request_params.append(self.requests_params[idx])
             self.requests_list = new_request_list
             self.requests_params = new_request_params
-        
-        self.mutex.unlock()
+    
+    def command_dispatcher(self):
+        # collect all commands in queue
+        size = self.commandQ.qsize()
+        # debug("Qsize: ", size)
+        for i in range(size):
+             # will be blocked until when some data are avaliable
+             # as we get qsize first, so there's no block here
+            item = self.commandQ.get()
+            command, params = item
+            if command == 'SET':
+                filename = params[0]
+                self.set_document(filename)
+            elif command == 'RENDER':
+                page_no, dpi, visible_pages =params
+                self.save_rendering_command(page_no, dpi, visible_pages)
+            elif command == 'STOP':
+                self.exit_flag = True
+            else:
+                # not supported command
+                assert(0)
 
     def run(self):
         """ render(int, float)
         This slot takes page no. and dpi and renders that page, then emits a signal with QImage"""
 
         debug('render entered.')
+        print(self.pid)
 
         while self.exit_flag == False:
-            self.msleep(10)
+            QtCore.QThread.msleep(50) # 20fps is enough for typical cases
 
-            if self.doc is None:
+            self.command_dispatcher()
+
+            # no file or no request even after reading pipe
+            if self.doc is None or len(self.requests_list) == 0:
                 continue
 
-            self.mutex.lock()
-            if len(self.requests_list) == 0:
-                self.mutex.unlock()
-                continue
-            # render the first one
+            # render the first one in queue
             # debug("Request List: ", self.requests_list)
             page_no = self.requests_list.pop(0)
             params = self.requests_params.pop(0)
-            self.mutex.unlock()
-            
+
             dpi = params[0]
-            # page = self.doc.loadPage(page_no)
-            page = self.doc.page(page_no)
+            if BACKEND_MuPDF:
+                page = self.doc.loadPage(page_no)
+            else:
+                page = self.doc.page(page_no)
+
             if page is None:
                 continue
 
             # debug('rendering page %d.' % (page_no))
-            img = page.renderToImage(dpi, dpi)
-            # zoom_ratio = dpi / 72.0
-            # pix = page.getPixmap(matrix=fitz.Matrix(zoom_ratio, zoom_ratio), alpha=False)
-            # # set the correct QImage format depending on alpha
-            # fmt = QtGui.QImage.Format_RGBA8888 if pix.alpha else QtGui.QImage.Format_RGB888
-            # img = QtGui.QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
+            if BACKEND_MuPDF:
+                zoom_ratio = dpi / 72.0
+                pix = page.getPixmap(matrix=fitz.Matrix(zoom_ratio, zoom_ratio), alpha=False)
+                # set the correct QImage format depending on alpha
+                fmt = QtGui.QImage.Format_RGBA8888 if pix.alpha else QtGui.QImage.Format_RGB888
+                img = QtGui.QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
+            else:
+                img = page.renderToImage(dpi, dpi)
 
             # # Add Heighlight over Link Annotation
             # self.painter.begin(img)
@@ -117,7 +144,15 @@ class PdfRender(QtCore.QThread):
             #     self.painter.fillRect(x, y, w, h, self.link_color)
             # self.painter.end()
             # 
-            self.rendered.emit(self.filename, page_no, dpi, img)
+            # self.rendered.emit(self.filename, page_no, dpi, img)
+
+            # QImage to QByteArray
+            img_byte_array = QtCore.QByteArray()
+            img_buffer = QtCore.QBuffer(img_byte_array)
+            img_buffer.open(QtCore.QIODevice.WriteOnly)
+            img.save(img_buffer, "png", quality=100)
+            
+            self.resultsQ.put([self.filename, page_no, dpi, img_byte_array])
 
         debug('render exited.')
 

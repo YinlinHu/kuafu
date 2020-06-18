@@ -10,11 +10,15 @@ from PyQt5 import QtGui
 from PyQt5 import QtWidgets
 
 # add parent directory to path
-currentDir = os.path.dirname(__file__)
+currentDir = os.path.dirname(os.path.abspath(__file__))
 parentDir = os.path.dirname(currentDir)
+# debug(currentDir)
+# debug(parentDir)
 sys.path.append(currentDir)
 sys.path.append(parentDir)
 sys.path.append(parentDir + os.path.sep + 'resources')
+
+from utils import debug
 
 from resources.ui_main import Ui_window
 
@@ -22,8 +26,6 @@ from document import DocumentView
 from library import LibraryView
 
 from lineedit import PageNoLineEdit, FindLineEdit
-
-from utils import debug
 
 from dialogs import ExportToImageDialog, DocInfoDialog
 

@@ -53,18 +53,18 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.annotview.setModel(self.annotview_model)
         # self.annotationView.resizeRequested.connect(self.onAnnotaionViewResized)
 
-        # Create separate thread for reading pdf metainformations
-        self.pdf_reader_thread = QtCore.QThread(self)
-        self.pdf_reader_obj = PdfReader()
-        self.pdf_reader_obj.moveToThread(self.pdf_reader_thread) # this must be moved before connecting signals
-        # self.renderRequested.connect(self.pdf_reader_obj.render)
-        self.readAnnotationRequested.connect(self.pdf_reader_obj.readAnnotation)
-        # self.readOutlineRequested.connect(self.pdf_reader_obj.readOutline)
-        # self.findTextRequested.connect(self.pdf_reader_obj.findText)
-        self.pdf_reader_obj.annotationFound.connect(self.onAnnotationFound)
-        # self.pdf_reader_obj.outlineFound.connect(self.onOutlineFound)
-        # self.pdf_reader_obj.textFound.connect(self.onTextFound)
-        self.pdf_reader_thread.start()
+        # # Create separate thread for reading pdf metainformations
+        # self.pdf_reader_thread = QtCore.QThread(self)
+        # self.pdf_reader_obj = PdfReader()
+        # self.pdf_reader_obj.moveToThread(self.pdf_reader_thread) # this must be moved before connecting signals
+        # # self.renderRequested.connect(self.pdf_reader_obj.render)
+        # self.readAnnotationRequested.connect(self.pdf_reader_obj.readAnnotation)
+        # # self.readOutlineRequested.connect(self.pdf_reader_obj.readOutline)
+        # # self.findTextRequested.connect(self.pdf_reader_obj.findText)
+        # self.pdf_reader_obj.annotationFound.connect(self.onAnnotationFound)
+        # # self.pdf_reader_obj.outlineFound.connect(self.onOutlineFound)
+        # # self.pdf_reader_obj.textFound.connect(self.onTextFound)
+        # self.pdf_reader_thread.start()
 
         self.initRepos()
 
@@ -101,9 +101,9 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.filename = self.fileview_model.data(m_index, QtCore.Qt.UserRole + 1)
         print(self.filename)
 
-        self.preview_graphicsview.setDocument(self.filename, self.screen_dpi, render_num=1)
+        self.preview_graphicsview.setDocument(self.filename, self.screen_dpi)
         
-        self.readAnnotationRequested.emit(self.filename)
+        # self.readAnnotationRequested.emit(self.filename)
 
     def onAnnotationFound(self, filename, annotList):
         # the view has changed, too late
@@ -150,9 +150,9 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         debug('closeEvent in LibraryView')
         self.preview_graphicsview.close()
         
-        #  wait for the reader thread to exit
-        loop = QtCore.QEventLoop()
-        self.pdf_reader_thread.finished.connect(loop.quit)
-        self.pdf_reader_thread.quit()
-        loop.exec_()
-        debug('pdf_reader_thread exit')
+        # #  wait for the reader thread to exit
+        # loop = QtCore.QEventLoop()
+        # self.pdf_reader_thread.finished.connect(loop.quit)
+        # self.pdf_reader_thread.quit()
+        # loop.exec_()
+        # debug('pdf_reader_thread exit')

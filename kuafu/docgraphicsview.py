@@ -7,6 +7,7 @@ from PyQt5 import QtOpenGL
 from popplerqt5 import Poppler
 
 from pdfworker import PdfRender
+from multiprocessing import Queue
 
 from utils import debug
 
@@ -30,6 +31,9 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.page_pixmap_items = []
         self.page_mask_items = []
 
+        self.cached_page_width = 100 # 1K pages will use about 30M, rather safe for a modern computer
+        self.cached_page_images = []
+
         self.doc = None
         self.filename = None
 
@@ -43,9 +47,14 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.view_column_count = 1
         self.leading_empty_pages = 0
 
-        self.render_num = 0
+        self.render_num = 4
         self.render_list = []
         self.rendered_pages = {}
+
+        for i in range(self.render_num):
+            tmpRender = PdfRender(Queue(), Queue())
+            tmpRender.start()
+            self.render_list.append(tmpRender)
 
         self.zoom_fitwidth = True
         self.screen_dpi = 0
@@ -60,11 +69,11 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
 
         # self.setRenderHint(QtGui.QPainter.Antialiasing)
-        # self.setViewportUpdateMode(QtWidgets.QGraphicsView.FullViewportUpdate)
+        self.setViewportUpdateMode(QtWidgets.QGraphicsView.FullViewportUpdate)
         # self.setViewportUpdateMode(QtWidgets.QGraphicsView.SmartViewportUpdate)
-        self.setViewportUpdateMode(QtWidgets.QGraphicsView.MinimalViewportUpdate)
+        # self.setViewportUpdateMode(QtWidgets.QGraphicsView.MinimalViewportUpdate)
         self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
-        self.setTransformationAnchor(QtWidgets.QGraphicsView.NoAnchor)
+        self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
 
         self.setTransform(QtGui.QTransform()) # set identity matrix for transformation
 
@@ -72,7 +81,12 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.resized_flag = False
         self.resize_timer = QtCore.QTimer(self)
         self.resize_timer.timeout.connect(self.resizeTrigger)
-        self.resize_timer.start(200)
+        self.resize_timer.start(3000)
+
+        # read the queue periodically
+        self.queue_timer = QtCore.QTimer(self)
+        self.queue_timer.timeout.connect(self.receivedRenderedImage)
+        self.queue_timer.start(10)
 
     def clear(self):
         self.scene.clear() # clear all items
@@ -85,7 +99,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.pages_dpi = []
         self.rendered_pages = {}
 
-    def setDocument(self, filename, screen_dpi, render_num):
+    def setDocument(self, filename, screen_dpi):
         self.clear()
 
         self.filename = filename
@@ -111,15 +125,14 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
             pg_height = self.doc.page(i).pageSizeF().height() / 72.0
             self.pages_size_inch.append([pg_width, pg_height])
 
-        # create render threads
-        self.destroyRenders() # TODO there's no need to destroy all threads
-        self.render_num = render_num
-        for i in range(self.render_num):
-            tmpRender = PdfRender()
-            tmpRender.set_document(self.filename)
-            tmpRender.rendered.connect(self.receivedRenderedImage)
-            tmpRender.start()
-            self.render_list.append(tmpRender)
+        # reSET for all render processes
+        for rd in self.render_list:
+            rd.commandQ.put(['SET', [self.filename]])
+
+        # clear cache
+        self.cached_page_images = []
+        for i in range(self.page_counts):
+            self.cached_page_images.append(None)
 
         # put all pages on scene (empty now)
         for i in range(self.page_counts):
@@ -160,6 +173,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
             self.page_pixmap_items.append(pixmapItem)
             self.page_mask_items.append(maskItem)
 
+        self.computePagesDPI(self.viewport().width())
         self.__rearrangePages()
         self.pagePositionChanged.emit(self.current_page, self.page_counts)
 
@@ -238,13 +252,25 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
                 continue
             self.renderRequest(page_no, self.pages_dpi[page_no])
 
-    def receivedRenderedImage(self, filename, page_no, dpi, image):
-        debug("-> Rendering Completed : <page:%d> <dpi:%.1f> <res:%d x %d>" % (page_no, dpi, image.width(), image.height()))
+    def handleSingleRenderedImage(self, filename, page_no, dpi, img_byte_array):
+        debug("-> Rendering Completed : <page:%d> <dpi:%.1f>" % (page_no, dpi))
 
         # the doc has changed, too late
         if filename != self.filename:
+            debug("%s -> %s: skipped" % (filename, self.filename))
+            return
+
+        if page_no in self.rendered_pages and self.rendered_pages[page_no] == dpi:
+            debug("duplicated rendering")
             return
             
+        # QByteArray to QImage
+        img_buffer = QtCore.QBuffer(img_byte_array)
+        img_buffer.open(QtCore.QIODevice.ReadOnly)
+        image = QtGui.QImageReader(img_buffer).read()
+
+        debug("dim: <%d x %d>" % (image.width(), image.height()))
+
         # crop to container's size
         containerSize = self.page_items[page_no].rect()
         roi = QtCore.QRect(1,1,containerSize.width()-2, containerSize.height()-2)
@@ -252,6 +278,10 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.page_pixmap_items[page_no].setPixmap(QtGui.QPixmap.fromImage(image))
 
         self.rendered_pages[page_no] = dpi
+
+        # save to cache 
+        if self.cached_page_images[page_no] is None:
+            self.cached_page_images[page_no] = image.scaledToWidth(self.cached_page_width)
 
         # # Request to render next page
         # if self.current_page <= page_no < (self.current_page + self.max_preload - 2):
@@ -269,17 +299,22 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
         # debug("Rendered Images: ", self.rendered_pages)
 
+    def receivedRenderedImage(self):
+        for rd in self.render_list:
+            resultsQ = rd.resultsQ
+            while not resultsQ.empty(): # check if there is data
+                item = resultsQ.get() # will be blocked until when some data are avaliable
+                filename, page_no, dpi, img_byte_array = item
+                self.handleSingleRenderedImage(filename, page_no, dpi, img_byte_array)
+
     def renderRequest(self, page_no, dpi):
         tgtWorkerIdx = page_no % self.render_num
-        self.render_list[tgtWorkerIdx].set_visible_pages(self.visible_pages)    
-        self.render_list[tgtWorkerIdx].render_async(page_no, dpi)
-        debug("<- Rendering Requested : <page:%d> <dpi:%.1f>" % (page_no, dpi))
+        self.render_list[tgtWorkerIdx].commandQ.put(['RENDER', [page_no, dpi, self.visible_pages]])
+        debug("<- Render %d Requested : <page:%d> <dpi:%.1f>" % (tgtWorkerIdx, page_no, dpi))
 
     def __rearrangePages(self):
         if self.doc is None:
             return
-
-        self.computePagesDPI(self.viewport().width())
 
         pages_width_pix = np.array(self.pages_size_pix)[:, 0]
         pages_height_pix = np.array(self.pages_size_pix)[:, 1]
@@ -329,22 +364,29 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
             return
 
         self.page_items[idx].setRect(0, 0, width, height)
+        self.page_mask_items[idx].setRect(0,0,0,0)
+        
         pixmap = self.page_pixmap_items[idx].pixmap()
         if not pixmap.isNull():
-            pixmap = pixmap.scaled(width-2, height-2)
-            self.page_pixmap_items[idx].setPixmap(pixmap) # tmporary image showing, need update
+            # cached_image = cached_image.scaled(width-2, height-2)
+            # tmp_pixmap = QtGui.QPixmap.fromImage(cached_image)
+            # self.page_pixmap_items[idx].setPixmap(tmp_pixmap) # tmporary image showing, need update
+            self.page_pixmap_items[idx].setPixmap(QtGui.QPixmap())
+
             # clear the rendered flag
             if idx in self.rendered_pages:
                 self.rendered_pages.pop(idx)
-
-        self.page_mask_items[idx].setRect(0,0,0,0)
 
     def __setPagePosition(self, idx, x, y):
         self.page_items[idx].setPos(x, y)
 
     def __resizePages(self, ratio):
         sceneRect = self.sceneRect() # save raw rect
+
+        self.computePagesDPI(sceneRect.width() * ratio)
+
         for i in range(self.page_counts):
+            # 
             width = self.page_items[i].rect().width()
             height = self.page_items[i].rect().height()
             x = self.page_items[i].scenePos().x()
@@ -357,16 +399,19 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
             self.__setPageSize(i, width, height)
             self.__setPagePosition(i, x, y)
+
         self.scene.setSceneRect(0, 0, sceneRect.width()*ratio, sceneRect.height()*ratio)
 
     def setColumnNumber(self, colNum):
         if colNum != self.view_column_count:
             self.view_column_count = colNum
+            self.computePagesDPI(self.viewport().width())
             self.__rearrangePages()
 
     def setPrecedingEmptyPage(self, emptyPages):
         if emptyPages != self.leading_empty_pages:
             self.leading_empty_pages = emptyPages
+            self.computePagesDPI(self.viewport().width())
             self.__rearrangePages()
 
     def zoomIn(self):
@@ -377,6 +422,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
     def zoomFitWidth(self):
         self.zoom_fitwidth = True
+        self.computePagesDPI(self.viewport().width())
         self.__rearrangePages()
 
     # def showEvent(self, ev):
@@ -386,12 +432,14 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
     def closeEvent(self, ev):
         debug('closeEvent in DocGraphicsView')
         self.destroyRenders()
+        debug('All renders are destroyed')
 
     def destroyRenders(self):
         for rd in self.render_list:
-            rd.stop_async()
+            rd.commandQ.put(['STOP', []])
         for rd in self.render_list:
-            rd.wait()
+            # rd.wait()
+            rd.join()
         self.render_list = []
         self.render_num = 0
 
@@ -405,11 +453,11 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
     def resizeTrigger(self):
         if self.resized_flag == True:
-            # ratio = self.transform().m11()
-            # self.__resizePages(ratio) # real scaling (rearrange and redraw)
-            # self.setTransform(QtGui.QTransform()) # no scaling after rearrange
-
-            self.__rearrangePages()
+            ratio = self.transform().m11()
+            debug(ratio)
+            self.__resizePages(ratio) # real scaling (rearrange and redraw)
+            self.setTransform(QtGui.QTransform()) # no scaling after rearrange
+            # 
             self.resized_flag = False
 
     def wheelEvent(self, ev):
