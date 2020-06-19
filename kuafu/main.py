@@ -206,58 +206,57 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
-        widget.setColumnNumber(1)
-
-        self.actionViewInOneColumn.setChecked(True)
-        self.actionViewInTwoColumns.setChecked(False)
-        self.actionViewInFourColumns.setChecked(False)
+        if widget.setColumnNumber(1):
+            self.actionViewInOneColumn.setChecked(True)
+            self.actionViewInTwoColumns.setChecked(False)
+            self.actionViewInFourColumns.setChecked(False)
 
     def onViewInTwoColumns(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
-        widget.setColumnNumber(2)
-
-        self.actionViewInOneColumn.setChecked(False)
-        self.actionViewInTwoColumns.setChecked(True)
-        self.actionViewInFourColumns.setChecked(False)
+        if widget.setColumnNumber(2):
+            self.actionViewInOneColumn.setChecked(False)
+            self.actionViewInTwoColumns.setChecked(True)
+            self.actionViewInFourColumns.setChecked(False)
 
     def onViewInFourColumns(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
-        widget.setColumnNumber(4)
-
-        self.actionViewInOneColumn.setChecked(False)
-        self.actionViewInTwoColumns.setChecked(False)
-        self.actionViewInFourColumns.setChecked(True)
+        if widget.setColumnNumber(4):
+            self.actionViewInOneColumn.setChecked(False)
+            self.actionViewInTwoColumns.setChecked(False)
+            self.actionViewInFourColumns.setChecked(True)
 
     def onPrecedingEmptyPage(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
         if self.actionPrecedingEmptyPage.isChecked():
-            widget.setPrecedingEmptyPage(1)
+            ret = widget.setPrecedingEmptyPage(1)
+            if not ret:
+                self.actionPrecedingEmptyPage.setChecked(False)
         else:
             widget.setPrecedingEmptyPage(0)
 
     def zoomIn(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
-        if isinstance(widget, DocumentView):
-            widget.zoomIn()
+        # if isinstance(widget, DocumentView):
+        widget.zoomIn()
 
     def zoomOut(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
-        if isinstance(widget, DocumentView):
-            widget.zoomOut()
+        # if isinstance(widget, DocumentView):
+        widget.zoomOut()
 
     def zoomFitWidth(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
-        if isinstance(widget, DocumentView):
-            widget.zoomFitWidth()
+        # if isinstance(widget, DocumentView):
+        widget.zoomFitWidth()
 
     def goPrevPage(self):
         debug("goPrevPage")

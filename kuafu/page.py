@@ -8,6 +8,85 @@ from pdfworker import PdfRender
 
 from utils import debug
 
+class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
+    def __init__(self, parent=None):
+        super(PageGraphicsItem, self).__init__(parent)
+
+        self.setRect(0,0,0,0)
+        self.setPos(0, 0)
+
+        pen = QtGui.QPen(QtCore.Qt.NoPen) # remove rect border
+        # pen = QtGui.QPen(QtCore.Qt.black)
+        # pen.setWidth(1)
+        self.setPen(pen)
+        self.setBrush(QtCore.Qt.white) # fill white color
+
+        self.cachedPixmap = None
+        self.cachedOffset = []
+        self.cachedRatio = 1.0
+
+        # pixmap
+        self.pixmapItem = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap())
+        # self.pixmapItem.setOffset(1, 1) # leave border space
+        self.pixmapItem.setParentItem(self)
+
+        # mask
+        self.maskItem = QtWidgets.QGraphicsRectItem()
+        self.maskItem.setRect(0, 0, 0, 0)
+
+        pen = QtGui.QPen(QtCore.Qt.yellow)
+        pen.setWidth(1)
+        self.maskItem.setPen(pen)
+        self.maskItem.setBrush(QtGui.QBrush(QtGui.QColor(0, 0, 0, 100))) # fill color
+
+        self.maskItem.setParentItem(self)
+
+        # 
+        self.setZValue(0)
+        self.pixmapItem.setZValue(1)
+        self.maskItem.setZValue(2)
+
+    def setSize(self, width, height, transition=True):
+
+        ratio = width / self.rect().width()
+        self.cachedRatio *= ratio
+
+        self.setRect(0, 0, width, height)
+        self.maskItem.setRect(0, 0, 0, 0)
+
+        if transition:
+            if self.cachedPixmap:
+                scaledPixmap = self.cachedPixmap.scaled(
+                    self.cachedPixmap.width() * self.cachedRatio, 
+                    self.cachedPixmap.height() * self.cachedRatio
+                    )
+                self.pixmapItem.setPixmap(scaledPixmap)
+                self.pixmapItem.setOffset(
+                    self.cachedOffset[0] * self.cachedRatio, 
+                    self.cachedOffset[1] * self.cachedRatio
+                    )
+        else:
+            self.cachedPixmap = None
+            self.cachedOffset = [0, 0]
+            self.cachedRatio = 1.0
+            self.pixmapItem.setPixmap(QtGui.QPixmap())
+            self.pixmapItem.setOffset(0, 0)
+
+    def setPosition(self, x, y):
+        self.setPos(x, y)
+
+    def setPixmap(self, pixmap, dx, dy):
+        self.cachedPixmap = pixmap
+        self.cachedOffset = [dx, dy]
+        self.cachedRatio = 1.0
+        self.pixmapItem.setPixmap(pixmap)
+        self.pixmapItem.setOffset(dx, dy)
+
+    def clear(self):
+        self.cachedPixmap = None
+        self.pixmapItem.setPixmap(QtGui.QPixmap())
+        self.pixmapItem.setOffset(0, 0)
+
 class DocumentFrame(QtWidgets.QFrame):
     """ This widget is a container of PageWidgets. PageWidget communicates
         Window through this widget """

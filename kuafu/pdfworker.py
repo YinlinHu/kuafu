@@ -3,7 +3,7 @@ from PyQt5 import QtGui
 
 # https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
 # MuPDF is much faster, but also use more memories
-BACKEND_MuPDF = True
+BACKEND_MuPDF = False
 
 if BACKEND_MuPDF:
     import fitz
@@ -51,7 +51,7 @@ class PdfRender(Process):
                 | Poppler.Document.Antialiasing
                 )
                 
-    def save_rendering_command(self, page_no, dpi, visible_pages):
+    def save_rendering_command(self, page_no, dpi, roi, visible_regions):
         # remove old duplicated
         if page_no in self.requests_list:
             index = self.requests_list.index(page_no)
@@ -59,7 +59,7 @@ class PdfRender(Process):
             self.requests_params.pop(index)
         # 
         self.requests_list.append(page_no)
-        self.requests_params.append([dpi])
+        self.requests_params.append([dpi, roi])
         # 
         # too many candidate, can only garentee current visible pages
         candi_num = len(self.requests_list)
@@ -67,7 +67,7 @@ class PdfRender(Process):
             new_request_list = []
             new_request_params = []
             for idx in range(candi_num):
-                if self.requests_list[idx] in visible_pages:
+                if self.requests_list[idx] in visible_regions:
                     new_request_list.append(self.requests_list[idx])
                     new_request_params.append(self.requests_params[idx])
             self.requests_list = new_request_list
@@ -86,8 +86,8 @@ class PdfRender(Process):
                 filename = params[0]
                 self.set_document(filename)
             elif command == 'RENDER':
-                page_no, dpi, visible_pages =params
-                self.save_rendering_command(page_no, dpi, visible_pages)
+                page_no, dpi, roi, visible_regions =params
+                self.save_rendering_command(page_no, dpi, roi, visible_regions)
             elif command == 'STOP':
                 self.exit_flag = True
             else:
@@ -102,7 +102,7 @@ class PdfRender(Process):
         print(self.pid)
 
         while self.exit_flag == False:
-            QtCore.QThread.msleep(50) # 20fps is enough for typical cases
+            QtCore.QThread.msleep(50)
 
             self.command_dispatcher()
 
@@ -115,7 +115,8 @@ class PdfRender(Process):
             page_no = self.requests_list.pop(0)
             params = self.requests_params.pop(0)
 
-            dpi = params[0]
+            dpi, roi = params
+
             if BACKEND_MuPDF:
                 page = self.doc.loadPage(page_no)
             else:
@@ -127,12 +128,17 @@ class PdfRender(Process):
             # debug('rendering page %d.' % (page_no))
             if BACKEND_MuPDF:
                 zoom_ratio = dpi / 72.0
-                pix = page.getPixmap(matrix=fitz.Matrix(zoom_ratio, zoom_ratio), alpha=False)
+                clip = fitz.Rect(
+                    roi.x() / zoom_ratio, 
+                    roi.y() / zoom_ratio, 
+                    (roi.x() + roi.width()) / zoom_ratio, 
+                    (roi.y() + roi.height()) / zoom_ratio)
+                pix = page.getPixmap(matrix=fitz.Matrix(zoom_ratio, zoom_ratio), clip=clip, alpha=False)
                 # set the correct QImage format depending on alpha
                 fmt = QtGui.QImage.Format_RGBA8888 if pix.alpha else QtGui.QImage.Format_RGB888
                 img = QtGui.QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
             else:
-                img = page.renderToImage(dpi, dpi)
+                img = page.renderToImage(dpi, dpi, roi.left(), roi.top(), roi.width(), roi.height())
 
             # # Add Heighlight over Link Annotation
             # self.painter.begin(img)
@@ -152,7 +158,7 @@ class PdfRender(Process):
             img_buffer.open(QtCore.QIODevice.WriteOnly)
             img.save(img_buffer, "png", quality=100)
             
-            self.resultsQ.put([self.filename, page_no, dpi, img_byte_array])
+            self.resultsQ.put([self.filename, page_no, dpi, roi, img_byte_array])
 
         debug('render exited.')
 

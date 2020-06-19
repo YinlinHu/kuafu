@@ -141,10 +141,19 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
                 parent_item.appendRow([item, dateItem])
 
     def setColumnNumber(self, colNum):
-        self.preview_graphicsview.setColumnNumber(colNum)
+        return self.preview_graphicsview.setColumnNumber(colNum)
 
     def setPrecedingEmptyPage(self, emptyNum):
-        self.preview_graphicsview.setPrecedingEmptyPage(emptyNum)
+        return self.preview_graphicsview.setPrecedingEmptyPage(emptyNum)
+
+    def zoomIn(self):
+        self.preview_graphicsview.zoomIn()
+
+    def zoomOut(self):
+        self.preview_graphicsview.zoomOut()
+
+    def zoomFitWidth(self):
+        self.preview_graphicsview.zoomFitWidth()
 
     def closeEvent(self, ev):
         debug('closeEvent in LibraryView')

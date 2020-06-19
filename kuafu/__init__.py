@@ -32,6 +32,7 @@ Changes :
 """
 
 # TODO:
+# There will be duplicated rendering when have multiple requests
 # FIXME :
 
 __version__ = '0.0.10'
