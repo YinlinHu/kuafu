@@ -7,6 +7,7 @@ from popplerqt5 import Poppler
 from pdfworker import PdfRender
 
 from utils import debug
+import math
 
 class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
     def __init__(self, parent=None):
@@ -25,10 +26,13 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
         self.cachedOffset = []
         self.cachedRatio = 1.0
 
-        # pixmap
-        self.pixmapItem = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap())
-        # self.pixmapItem.setOffset(1, 1) # leave border space
-        self.pixmapItem.setParentItem(self)
+        # pixmaps
+        self.patch_basesize = 1000
+        self.patch_rects = []
+        
+        # for smoothing transitions
+        self.cached_pixmaps = {}
+        self.current_items = {}
 
         # mask
         self.maskItem = QtWidgets.QGraphicsRectItem()
@@ -43,49 +47,211 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
 
         # 
         self.setZValue(0)
-        self.pixmapItem.setZValue(1)
-        self.maskItem.setZValue(2)
+        self.maskItem.setZValue(3)
+        # 0: self, 1: transient, 2: current, 3: mask
 
-    def setSize(self, width, height, transition=True):
+    def setSize(self, width, height):
+        self.patch_rects = self.compute_patch_rects(width, height)
 
-        ratio = width / self.rect().width()
-        self.cachedRatio *= ratio
+        # may be called many times before the first addPixmap()
+        ratio_thistime = width / self.rect().width()
 
         self.setRect(0, 0, width, height)
         self.maskItem.setRect(0, 0, 0, 0)
 
-        if transition:
-            if self.cachedPixmap:
-                scaledPixmap = self.cachedPixmap.scaled(
-                    self.cachedPixmap.width() * self.cachedRatio, 
-                    self.cachedPixmap.height() * self.cachedRatio
+        # remove all transient items
+        for pixmap in self.cached_pixmaps:
+            item = self.cached_pixmaps[pixmap]['associated_item']
+            if item:
+                item.setParentItem(None)
+                self.cached_pixmaps[pixmap]['associated_item'] = None
+
+        # remove all current items (move their pixmaps to cache)
+        for item in self.current_items:
+            item.setParentItem(None)
+            # 
+            pixmap = self.current_items[item]['pixmap']
+            self.cached_pixmaps[pixmap] = {
+                "dx": self.current_items[item]['dx'],
+                "dy": self.current_items[item]['dy'],
+                "ratio": self.current_items[item]['ratio'],
+                "associated_item": None
+            }
+        self.current_items = {}
+
+        # update the ratio in cached pixmaps
+        for pixmap in self.cached_pixmaps:
+            self.cached_pixmaps[pixmap]['ratio'] *= ratio_thistime
+
+    def updateTransientItems(self, visibleRect):
+        for pixmap in self.cached_pixmaps:
+            raw_dx = self.cached_pixmaps[pixmap]['dx']
+            raw_dy = self.cached_pixmaps[pixmap]['dy']
+            ratio = self.cached_pixmaps[pixmap]['ratio']
+            associated_item = self.cached_pixmaps[pixmap]['associated_item']
+            # 
+            x = raw_dx * ratio
+            y = raw_dy * ratio
+            w = pixmap.width() * ratio
+            h = pixmap.height() * ratio
+            vrect = QtCore.QRectF(x, y, w, h) # virtual rect
+            irect = visibleRect.intersected(vrect) # intersected rect
+            # 
+            if irect.isEmpty(): # remove associated transient item if unvisible
+                if associated_item:
+                    associated_item.setParentItem(None)
+                    self.cached_pixmaps[pixmap]['associated_item'] = None
+            else:
+                # check if already visible in current items
+                total_overlap_size = 0
+                for it in self.current_items:
+                    rect = QtCore.QRectF(
+                        it.offset().x(), it.offset().y(), 
+                        it.boundingRect().width(), it.boundingRect().height()
                     )
-                self.pixmapItem.setPixmap(scaledPixmap)
-                self.pixmapItem.setOffset(
-                    self.cachedOffset[0] * self.cachedRatio, 
-                    self.cachedOffset[1] * self.cachedRatio
-                    )
+                    cirect = rect.intersected(irect)
+                    total_overlap_size += cirect.width() * cirect.height()
+                if total_overlap_size / (irect.width()*irect.height()) > 0.90:
+                    continue
+                    
+                # crop the visible part
+                crop_x = math.floor((irect.x() - vrect.x()) / ratio)
+                crop_y = math.floor((irect.y() - vrect.y()) / ratio)
+                crop_w = math.ceil(irect.width() / ratio)
+                crop_h = math.ceil(irect.height() / ratio)
+                cropped_pixmap = pixmap.copy(crop_x, crop_y, crop_w, crop_h)
+
+                # resize to current scale
+                resized_pixmap = cropped_pixmap.scaled(math.ceil(irect.width()), math.ceil(irect.height()))
+
+                # debug, draw some mask
+                # if True:
+                if False:
+                    painter = QtGui.QPainter()
+                    painter.begin(resized_pixmap)
+                    painter.fillRect(resized_pixmap.rect(), QtGui.QColor(255, 0, 0, 100))
+                    painter.end()
+                    debug("Add transient item: <%d x %d>" % (resized_pixmap.width(), resized_pixmap.height()))
+
+                if associated_item:
+                    associated_item.setPixmap(resized_pixmap)
+                    associated_item.setOffset(irect.x(), irect.y())
+                else:
+                    # add to scene
+                    item = QtWidgets.QGraphicsPixmapItem(resized_pixmap, parent=self)
+                    item.setOffset(irect.x(), irect.y())
+                    item.setZValue(1)
+                    self.cached_pixmaps[pixmap]['associated_item'] = item
+
+    def get_roi_patches(self, roi_rect):
+        patch_positions = []
+        patches = []
+        for i in range(len(self.patch_rects)):
+            pRect = self.patch_rects[i]
+            interRect = roi_rect.intersected(pRect)
+            if not interRect.isEmpty():
+                patches.append(pRect)
+                patch_positions.append(i)
+        return patch_positions, patches
+            
+    def compute_patch_rects(self, width, height):
+        rects = []
+
+        if width >= self.patch_basesize:
+            horiCnt = int(math.pow(2, int(math.log2(width / self.patch_basesize) + 0.5)))
         else:
-            self.cachedPixmap = None
-            self.cachedOffset = [0, 0]
-            self.cachedRatio = 1.0
-            self.pixmapItem.setPixmap(QtGui.QPixmap())
-            self.pixmapItem.setOffset(0, 0)
+            horiCnt = 1
+        if height >= self.patch_basesize:
+            vertCnt = int(math.pow(2, int(math.log2(height / self.patch_basesize) + 0.5)))
+        else:
+            vertCnt = 1
+
+        horiStep = int(width / horiCnt)
+        vertStep = int(height / vertCnt)
+        for i in range(horiCnt):
+            for j in range(vertCnt):
+                x = i*horiStep
+                y = j*vertStep
+                w = horiStep
+                h = vertStep
+                # 
+                if x + w > width:
+                    w = width - x
+                if y + h > height:
+                    h = height - y
+                rects.append(QtCore.QRectF(x, y, w, h))
+        return rects
 
     def setPosition(self, x, y):
         self.setPos(x, y)
 
-    def setPixmap(self, pixmap, dx, dy):
-        self.cachedPixmap = pixmap
-        self.cachedOffset = [dx, dy]
-        self.cachedRatio = 1.0
-        self.pixmapItem.setPixmap(pixmap)
-        self.pixmapItem.setOffset(dx, dy)
+    def addPixmap(self, pixmap, dx, dy):
+        item = QtWidgets.QGraphicsPixmapItem(pixmap, parent=self)
+        item.setOffset(dx, dy)
+        item.setZValue(2)
+
+        self.current_items[item] = {
+            "pixmap": pixmap,
+            "dx": dx,
+            "dy": dy,
+            "ratio": 1.0,
+        }
+
+        # remove cached pixmaps which are fully covered
+        pixmapsToRemove = []
+        for pm in self.cached_pixmaps:
+            raw_dx = self.cached_pixmaps[pm]['dx']
+            raw_dy = self.cached_pixmaps[pm]['dy']
+            ratio = self.cached_pixmaps[pm]['ratio']
+            # 
+            x = raw_dx * ratio
+            y = raw_dy * ratio
+            w = pm.width() * ratio
+            h = pm.height() * ratio
+            current_rect = QtCore.QRectF(x, y, w, h)
+            # 
+            total_overlap_size = 0
+            for it in self.current_items:
+                rect = QtCore.QRectF(
+                    it.offset().x(), it.offset().y(), 
+                    it.boundingRect().width(), it.boundingRect().height()
+                )
+                irect = rect.intersected(current_rect)
+                total_overlap_size += irect.width() * irect.height()
+            #
+            # debug(w*h, total_overlap_size)
+
+            fully_coverd = False
+            if total_overlap_size / (w*h) > 0.90:
+                fully_coverd = True
+            # 
+            if fully_coverd:
+                pixmapsToRemove.append(pm)
+                debug("Remove cached pixmap: <%d x %d> ratio: %.2f" % (w, h, ratio))
+        # 
+        for pm in pixmapsToRemove:
+            self.removeCachedPixmap(pm)
+
+        # debug
+        currentItemsCnt = len(self.current_items)
+        cachedPixmapsCnt = len(self.cached_pixmaps)
+        debug("Current items: ", currentItemsCnt, " Cached pixmaps: ", cachedPixmapsCnt)
+        
+    def removeCachedPixmap(self, pixmap):
+        if pixmap in self.cached_pixmaps:
+            associated_item = self.cached_pixmaps[pixmap]['associated_item']
+            if associated_item:
+                associated_item.setParentItem(None)
+            self.cached_pixmaps.pop(pixmap)
 
     def clear(self):
-        self.cachedPixmap = None
-        self.pixmapItem.setPixmap(QtGui.QPixmap())
-        self.pixmapItem.setOffset(0, 0)
+        #TODO
+        pass
+        #self.cachedPixmap = None
+        #self.cachedOffset = [0, 0]
+        #self.cachedRatio = 1.0
+        #self.pixmapItem.setPixmap(QtGui.QPixmap())
+        #self.pixmapItem.setOffset(0, 0)
 
 class DocumentFrame(QtWidgets.QFrame):
     """ This widget is a container of PageWidgets. PageWidget communicates

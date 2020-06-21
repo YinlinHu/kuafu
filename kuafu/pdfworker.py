@@ -3,6 +3,8 @@ from PyQt5 import QtGui
 
 # https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
 # MuPDF is much faster, but also use more memories
+# 
+# When clip with very large zoom, MuPDF will have problems
 BACKEND_MuPDF = False
 
 if BACKEND_MuPDF:
@@ -33,8 +35,8 @@ class PdfRender(Process):
         self.link_color = QtGui.QColor(0,0,127, 40)
         self.exit_flag = False
 
-        self.requests_list = []
-        self.requests_params = []
+        self.requests_queue = {}
+        
         # self.mutex = QtCore.QMutex()
 
     def set_document(self, filename):
@@ -52,28 +54,68 @@ class PdfRender(Process):
                 )
                 
     def save_rendering_command(self, page_no, dpi, roi, visible_regions):
-        # remove old duplicated
-        if page_no in self.requests_list:
-            index = self.requests_list.index(page_no)
-            self.requests_list.pop(index)
-            self.requests_params.pop(index)
-        # 
-        self.requests_list.append(page_no)
-        self.requests_params.append([dpi, roi])
-        # 
-        # too many candidate, can only garentee current visible pages
-        candi_num = len(self.requests_list)
-        if candi_num >= 2:
-            new_request_list = []
-            new_request_params = []
-            for idx in range(candi_num):
-                if self.requests_list[idx] in visible_regions:
-                    new_request_list.append(self.requests_list[idx])
-                    new_request_params.append(self.requests_params[idx])
-            self.requests_list = new_request_list
-            self.requests_params = new_request_params
-    
-    def command_dispatcher(self):
+        if page_no in self.requests_queue:
+            # remove old command with the same page number but different dpi                        
+            dpi_list, roi_list = self.requests_queue[page_no]
+            assert(len(dpi_list) == len(roi_list))
+            cnt = len(dpi_list)
+            duplicate_flag = False
+            for i in range(cnt):
+                if dpi_list[i] != dpi:
+                    dpi_list[i] = None # mark deleted item as None
+                    roi_list[i] = None
+                elif roi_list[i] == roi:
+                    duplicate_flag = True
+            if not duplicate_flag:
+                dpi_list.append(dpi)
+                roi_list.append(roi)
+        else:
+            self.requests_queue[page_no] = [[dpi], [roi]]
+            
+        # only garentee current visible pages
+        emptyKeys = []
+        for page_no in self.requests_queue:
+            if page_no not in visible_regions:
+                emptyKeys.append(page_no)
+                continue
+            dpi_list, roi_list = self.requests_queue[page_no]
+            assert(len(dpi_list) == len(roi_list))
+            cnt = len(dpi_list)            
+            for i in range(cnt):
+                roi = roi_list[i]
+                if roi is None:
+                    continue
+                if roi.intersected(visible_regions[page_no]).isEmpty():
+                    roi_list[i] = None # mark deleted item as None
+                    dpi_list[i] = None            
+        for page_no in emptyKeys:
+            self.requests_queue.pop(page_no)
+
+    def get_command_from_queue(self):
+        if len(self.requests_queue) == 0:
+            return None
+        emptyKeys = []
+        command = None
+        for page_no in self.requests_queue:
+            dpi_list, roi_list = self.requests_queue[page_no]
+            dpi = None
+            roi = None
+            while dpi is None:
+                if len(dpi_list) == 0:
+                    break
+                dpi = dpi_list.pop(0)
+                roi = roi_list.pop(0)
+            if dpi is None:
+                assert(len(dpi_list) == 0 and len(roi_list) == 0)
+                emptyKeys.append(page_no)
+            else:
+                command = [page_no, dpi, roi]
+                break
+        for page_no in emptyKeys:
+            self.requests_queue.pop(page_no)
+        return command
+        
+    def receive_commands(self):
         # collect all commands in queue
         size = self.commandQ.qsize()
         # debug("Qsize: ", size)
@@ -104,19 +146,21 @@ class PdfRender(Process):
         while self.exit_flag == False:
             QtCore.QThread.msleep(50)
 
-            self.command_dispatcher()
+            self.receive_commands()
 
             # no file or no request even after reading pipe
-            if self.doc is None or len(self.requests_list) == 0:
+            if self.doc is None or len(self.requests_queue) == 0:
                 continue
 
             # render the first one in queue
             # debug("Request List: ", self.requests_list)
-            page_no = self.requests_list.pop(0)
-            params = self.requests_params.pop(0)
-
-            dpi, roi = params
-
+            
+            command = self.get_command_from_queue()
+            if command is None:
+                continue
+            
+            page_no, dpi, roi = command
+            
             if BACKEND_MuPDF:
                 page = self.doc.loadPage(page_no)
             else:
