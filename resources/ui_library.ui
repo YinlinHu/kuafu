@@ -32,16 +32,9 @@
       <enum>Qt::Horizontal</enum>
      </property>
      <widget class="QSplitter" name="splitter_1">
-      <property name="orientation">
-       <enum>Qt::Vertical</enum>
-      </property>
-      <widget class="QTreeView" name="repoview"/>
-      <widget class="QTreeView" name="tagview"/>
-     </widget>
-     <widget class="QSplitter" name="splitter_2">
       <property name="maximumSize">
        <size>
-        <width>800</width>
+        <width>16777215</width>
         <height>16777215</height>
        </size>
       </property>

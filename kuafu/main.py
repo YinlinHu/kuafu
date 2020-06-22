@@ -29,6 +29,8 @@ from lineedit import PageNoLineEdit, FindLineEdit
 
 from dialogs import ExportToImageDialog, DocInfoDialog
 
+from docgraphicsview import DocGraphicsView
+
 HOMEDIR = os.path.expanduser("~")
 
 class MainWindow(QtWidgets.QMainWindow, Ui_window):
@@ -37,21 +39,16 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         self.setupUi(self)
 
         self.dockWidget = QtWidgets.QDockWidget('Dock Test', self)
-        self.listWidget = QtWidgets.QListWidget()
-        self.listWidget.addItem('Google')
-        self.listWidget.addItem('Facebook')
-        self.listWidget.addItem('Microsoft')
-        self.listWidget.addItem('Apple')
-        self.dockWidget.setWidget(self.listWidget)
+        self.thumbView = DocGraphicsView(self.dockWidget, render_num=2)
+        self.dockWidget.setWidget(self.thumbView)
         self.dockWidget.setFloating(False)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.dockWidget)
 
-
         self.screen_dpi = screens[0].logicalDotsPerInch()
         
-        libWidget = LibraryView(self.screen_dpi, self.centraltabwidget)
-        libWidget.preview_graphicsview.pagePositionChanged.connect(self.setPageInfoOnToolbar)
-        self.centraltabwidget.addTab(libWidget, "My Library")
+        self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi, self.thumbView)
+        self.libWidget.preview_graphicsview.pagePositionChanged.connect(self.setPageInfoOnToolbar)
+        self.centraltabwidget.addTab(self.libWidget, "My Library")
         
         self.centraltabwidget.setTabsClosable(True)
 
@@ -322,11 +319,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         """ Loads pdf document in all threads """
         filename = os.path.expanduser(filename)
         
-        widget = DocumentView(self.centraltabwidget, filename, self.screen_dpi)
-        widget.showStatusRequested.connect(self.showStatus)
+        # widget = DocumentView(self.centraltabwidget, filename, self.screen_dpi)
+        # widget.showStatusRequested.connect(self.showStatus)
+        # self.centraltabwidget.addTab(widget, filename)
+        # self.centraltabwidget.setCurrentWidget(widget)
 
-        self.centraltabwidget.addTab(widget, filename)
-        self.centraltabwidget.setCurrentWidget(widget)
+        # self.annotview_model.removeRows(0, self.annotview_model.rowCount())
+        self.libWidget.preview_graphicsview.setDocument(filename, self.screen_dpi)
+        
 
     def openFile(self):
         filename, sel_filter = QtWidgets.QFileDialog.getOpenFileName(self,

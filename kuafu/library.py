@@ -22,30 +22,24 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     # pagePositionChanged = QtCore.pyqtSignal(int, int)
     # showStatusRequested = QtCore.pyqtSignal(str)
 
-    def __init__(self, screen_dpi, parent=None):
+    def __init__(self, parent, screen_dpi, thumbView):
         super(LibraryView, self).__init__(parent) # Call the inherited classes __init__ method
         self.setupUi(self)
 
         self.screen_dpi = screen_dpi
+        self.thumb_view = thumbView
 
-        self.splitter_main.setSizes([2,2,2]) # set relative widths of its children
+        self.splitter_main.setSizes([2,4]) # set relative widths of its children
 
-        self.splitter_main.setCollapsible(2, False) 
+        self.splitter_main.setCollapsible(1, False) 
         # self.splitter_main.setCollapsible(0, False) 
 
         self.repos = ["/home/yhu/下载/", "/home/yhu/tmp/"]
-        self.current_dir_idx = 0
-        self.repoview_model = QtGui.QStandardItemModel(self)
-        self.repoview.setModel(self.repoview_model)
-        self.repoview.clicked.connect(self.onDirClick)
-        self.repoview.setHeaderHidden(True)
 
         self.fileview_model = QtGui.QStandardItemModel(self)
         self.fileview.setModel(self.fileview_model)
         self.fileview.clicked.connect(self.onFileClick)
-        self.current_view_frame = None
 
-        self.repoview.setAlternatingRowColors(True)
         self.fileview.setAlternatingRowColors(True)
         self.annotview.setAlternatingRowColors(True)
 
@@ -66,15 +60,8 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         # # self.pdf_reader_obj.textFound.connect(self.onTextFound)
         # self.pdf_reader_thread.start()
 
-        self.initRepos()
-
-    def initRepos(self):
-        parent_repo_item = self.repoview_model.invisibleRootItem()
-
-        for dirname in self.repos:
-            item = QtGui.QStandardItem(dirname)
-            item.setData(dirname, QtCore.Qt.UserRole + 1)
-            parent_repo_item.appendRow(item)
+        dirname = self.repos[0]
+        self.setFileList(dirname)
 
     def setFileList(self, dirname):
         # remove all file list first
@@ -90,10 +77,6 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
                 item.setData(path, QtCore.Qt.UserRole + 1)
                 parent_file_item.appendRow(item)
 
-    def onDirClick(self, m_index):
-        dirname = self.repoview_model.data(m_index, QtCore.Qt.UserRole + 1)
-        self.setFileList(dirname)
-
     def onFileClick(self, m_index):
         # remove all annotatoin first
         self.annotview_model.removeRows(0, self.annotview_model.rowCount())
@@ -102,6 +85,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         print(self.filename)
 
         self.preview_graphicsview.setDocument(self.filename, self.screen_dpi)
+        self.thumb_view.setDocument(self.filename, self.screen_dpi)
         
         # self.readAnnotationRequested.emit(self.filename)
 
@@ -141,9 +125,11 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
                 parent_item.appendRow([item, dateItem])
 
     def setColumnNumber(self, colNum):
+        self.thumb_view.setColumnNumber(colNum)
         return self.preview_graphicsview.setColumnNumber(colNum)
 
     def setPrecedingEmptyPage(self, emptyNum):
+        self.thumb_view.setPrecedingEmptyPage(emptyNum)
         return self.preview_graphicsview.setPrecedingEmptyPage(emptyNum)
 
     def zoomIn(self):
@@ -158,6 +144,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     def closeEvent(self, ev):
         debug('closeEvent in LibraryView')
         self.preview_graphicsview.close()
+        self.thumb_view.close()
         
         # #  wait for the reader thread to exit
         # loop = QtCore.QEventLoop()

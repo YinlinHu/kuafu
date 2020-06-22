@@ -2,9 +2,7 @@ from PyQt5 import QtCore
 from PyQt5 import QtGui
 
 # https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
-# MuPDF is much faster, but also use more memories
-# 
-# When clip with very large zoom, MuPDF will have problems
+# MuPDF is much faster at rendering, but slower at loading and also use more memories
 BACKEND_MuPDF = False
 
 if BACKEND_MuPDF:
@@ -41,7 +39,8 @@ class PdfRender(Process):
 
     def set_document(self, filename):
         self.filename = filename
-
+        self.requests_queue = {}
+        
         if BACKEND_MuPDF:
             self.doc = fitz.open(filename)
         else:
@@ -52,7 +51,25 @@ class PdfRender(Process):
                 | Poppler.Document.TextHinting
                 | Poppler.Document.Antialiasing
                 )
-                
+
+    def get_page_sizes(self):
+        # extract page sizes for all pages
+        pages_size_inch = []
+        if BACKEND_MuPDF:
+            page_counts = len(self.doc)
+            for i in range(page_counts):
+                page_rect = self.doc[i].MediaBox
+                pg_width = page_rect.width / 72.0
+                pg_height = page_rect.height / 72.0
+                pages_size_inch.append([pg_width, pg_height])
+        else:
+            page_counts = self.doc.numPages()  
+            for i in range(page_counts):
+                pg_width = self.doc.page(i).pageSizeF().width() / 72.0 # width in inch
+                pg_height = self.doc.page(i).pageSizeF().height() / 72.0
+                pages_size_inch.append([pg_width, pg_height])    
+        return pages_size_inch  
+
     def save_rendering_command(self, page_no, dpi, roi, visible_regions):
         if page_no in self.requests_queue:
             # remove old command with the same page number but different dpi                        
@@ -127,6 +144,9 @@ class PdfRender(Process):
             if command == 'SET':
                 filename = params[0]
                 self.set_document(filename)
+            elif command == 'PAGESIZES':
+                pages_size_inch = self.get_page_sizes()
+                self.resultsQ.put(['PAGESIZES_RES', self.filename, pages_size_inch])
             elif command == 'RENDER':
                 page_no, dpi, roi, visible_regions =params
                 self.save_rendering_command(page_no, dpi, roi, visible_regions)
@@ -144,7 +164,7 @@ class PdfRender(Process):
         print(self.pid)
 
         while self.exit_flag == False:
-            QtCore.QThread.msleep(50)
+            QtCore.QThread.msleep(10)
 
             self.receive_commands()
 
@@ -171,18 +191,41 @@ class PdfRender(Process):
 
             # debug('rendering page %d.' % (page_no))
             if BACKEND_MuPDF:
+                page_rect = page.MediaBox
+                # 
                 zoom_ratio = dpi / 72.0
-                clip = fitz.Rect(
-                    roi.x() / zoom_ratio, 
-                    roi.y() / zoom_ratio, 
-                    (roi.x() + roi.width()) / zoom_ratio, 
-                    (roi.y() + roi.height()) / zoom_ratio)
+                x1 = roi.x() / zoom_ratio
+                y1 = roi.y() / zoom_ratio
+                x2 = (roi.x() + roi.width()) / zoom_ratio 
+                y2 = (roi.y() + roi.height()) / zoom_ratio
+                # 
+                x1 = min(max(x1, 0), page_rect.width)
+                y1 = min(max(y1, 0), page_rect.height)
+                x2 = min(max(x2, 0), page_rect.width)
+                y2 = min(max(y2, 0), page_rect.height)
+                clip = fitz.Rect(x1, y1, x2, y2)
                 pix = page.getPixmap(matrix=fitz.Matrix(zoom_ratio, zoom_ratio), clip=clip, alpha=False)
                 # set the correct QImage format depending on alpha
                 fmt = QtGui.QImage.Format_RGBA8888 if pix.alpha else QtGui.QImage.Format_RGB888
                 img = QtGui.QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
+                # 
+                roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
             else:
-                img = page.renderToImage(dpi, dpi, roi.left(), roi.top(), roi.width(), roi.height())
+                pg_width_pix = dpi * (page.pageSizeF().width() / 72.0) # DPI * width in inch
+                pg_height_pix = dpi * (page.pageSizeF().height() / 72.0)
+                x1 = roi.x()
+                y1 = roi.y()
+                x2 = x1 + roi.width()
+                y2 = y1 + roi.height()
+                # 
+                x1 = min(max(x1, 0), pg_width_pix)
+                y1 = min(max(y1, 0), pg_height_pix)
+                x2 = min(max(x2, 0), pg_width_pix)
+                y2 = min(max(y2, 0), pg_height_pix)
+                img = page.renderToImage(dpi, dpi, x1, y1, x2 - x1, y2 - y1)
+                # 
+                roi.setCoords(x1, y1, x2, y2) # write back roi
+            
 
             # # Add Heighlight over Link Annotation
             # self.painter.begin(img)
@@ -202,7 +245,7 @@ class PdfRender(Process):
             img_buffer.open(QtCore.QIODevice.WriteOnly)
             img.save(img_buffer, "png", quality=100)
             
-            self.resultsQ.put([self.filename, page_no, dpi, roi, img_byte_array])
+            self.resultsQ.put(['RENDER_RES', self.filename, page_no, dpi, roi, img_byte_array])
 
         debug('render exited.')
 

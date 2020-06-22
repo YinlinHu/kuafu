@@ -18,7 +18,7 @@ import numpy as np
 class DocGraphicsView(QtWidgets.QGraphicsView):
     pagePositionChanged = QtCore.pyqtSignal(int, int)
 
-    def __init__(self, parent):
+    def __init__(self, parent, render_num=4):
         super(DocGraphicsView, self).__init__(parent)
 
         # self.setViewport(QtOpenGL.QGLWidget()) # opengl
@@ -33,7 +33,6 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
         self.page_items = [] # instances of PageGraphicsItem
 
-        self.doc = None
         self.current_filename = None
 
         self.page_counts = 0
@@ -45,7 +44,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.view_column_count = 1
         self.leading_empty_pages = 0
 
-        self.render_num = 4
+        self.render_num = render_num
         self.render_list = []
         self.rendered_info = {}
         self.current_rendering_dpi = []
@@ -64,6 +63,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.horizontalScrollBar().valueChanged.connect(self.onScrolling)
         self.verticalScrollBar().valueChanged.connect(self.onScrolling)
 
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
 
         # self.setRenderHint(QtGui.QPainter.Antialiasing)
@@ -79,8 +79,8 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
         # read the queue periodically
         self.queue_timer = QtCore.QTimer(self)
-        self.queue_timer.timeout.connect(self.receivedRenderedImage)
-        self.queue_timer.start(50)
+        self.queue_timer.timeout.connect(self.retrieveQueueResults)
+        self.queue_timer.start(10)
 
     def clear(self):
         self.scene.clear() # clear all items
@@ -95,40 +95,25 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.clear()
 
         self.current_filename = filename
-        # self.doc = fitz.open(filename)
-        # self.page_counts = len(self.doc)
-
-        password = ""
-        self.doc = Poppler.Document.load(self.current_filename, password.encode(), password.encode())
-        self.doc.setRenderHint(
-            Poppler.Document.TextAntialiasing
-            | Poppler.Document.TextHinting
-            | Poppler.Document.Antialiasing
-            )
-        self.page_counts = self.doc.numPages()
         self.screen_dpi = screen_dpi
-        
-        # extract page sizes for all pages
-        for i in range(self.page_counts):
-            # dlist = self.doc[i].getDisplayList()
-            # pg_width = dlist.rect.width / 72.0
-            # pg_height = dlist.rect.height / 72.0
-            pg_width = self.doc.page(i).pageSizeF().width() / 72.0 # width in inch
-            pg_height = self.doc.page(i).pageSizeF().height() / 72.0
-            self.pages_size_inch.append([pg_width, pg_height])
 
         # reSET for all render processes
         for rd in self.render_list:
             rd.commandQ.put(['SET', [self.current_filename]])
 
+        # query page size using the first worker
+        self.render_list[0].commandQ.put(['PAGESIZES', [None]])
+
+    def onPageSizesReceived(self, pages_size_inch):
         # put all pages on scene (empty now)
+        self.page_counts = len(pages_size_inch)
+        self.pages_size_inch = pages_size_inch
         for i in range(self.page_counts):
             pageItem = PageGraphicsItem()
             self.scene.addItem(pageItem)
             self.page_items.append(pageItem)
-
         self.fitwidth_flag = True
-        self.computePagesDPI(self.viewport().width())
+        self.computePagesDPI(self.viewport())
         self.__rearrangePages()
         self.renderCurrentVisiblePages()
         self.pagePositionChanged.emit(self.current_page, self.page_counts)
@@ -137,20 +122,23 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.renderCurrentVisiblePages()
         self.pagePositionChanged.emit(self.current_page, self.page_counts)
 
-    def computePagesDPI(self, viewPixelWidth):
+    def computePagesDPI(self, viewport):
         if self.fitwidth_flag:
+            viewWidth = viewport.width()
+            viewHeight = viewport.height()
+            
             # all pages will have the same width, but may different height
             self.current_rendering_dpi = []
             self.current_pages_size_pix =[]
 
-            viewPixelWidth -= (self.horispacing * (self.view_column_count + 1))
-            viewPixelWidth /= self.view_column_count
+            viewWidth -= (self.horispacing * (self.view_column_count + 1))
+            viewWidth /= self.view_column_count
             
             for i in range(self.page_counts):
-                dpi = viewPixelWidth / self.pages_size_inch[i][0]
+                dpi = viewWidth / self.pages_size_inch[i][0]
                 height = self.pages_size_inch[i][1] * dpi
                 self.current_rendering_dpi.append(dpi)
-                self.current_pages_size_pix.append([int(viewPixelWidth), int(height)])
+                self.current_pages_size_pix.append([int(viewWidth), int(height)])
         else:
             pass
 
@@ -221,14 +209,14 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
                 self.renderRequest(page_no, dpi, roi, render_idx, self.current_visible_regions)
 
-                debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %d %d %d %d> <roi: %d %d %d %d>" % (
+                debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %.1f %.1f %.1f %.1f> <roi: %.1f %.1f %.1f %.1f>" % (
                     render_idx, page_no, dpi, 
                     roi_raw.left(), roi_raw.top(), roi_raw.width(), roi_raw.height(), 
                     roi.left(), roi.top(), roi.width(), roi.height()
                     ))
 
     def handleSingleRenderedImage(self, render_idx, filename, page_no, dpi, roi, img_byte_array):
-        debug("-> Rendering %d Completed : <page:%d> <dpi:%.2f> <roi: %d %d %d %d>" % (
+        debug("-> Rendering %d Completed : <page:%d> <dpi:%.2f> <roi: %.1f %.1f %.1f %.1f>" % (
             render_idx, page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
         ))
 
@@ -247,8 +235,10 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
             debug("duplicated rendering. skipping")
             return
 
+        if len(self.current_rendering_dpi) == 0:
+            return
         # too late, the current rendering dpi is already changed
-        if dpi != self.current_rendering_dpi[page_no] :
+        if dpi != self.current_rendering_dpi[page_no]:
             debug("unmatched DPI: %.2f -> %.2f. skipping" % (dpi, self.current_rendering_dpi[page_no]))
             return
             
@@ -288,7 +278,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
         # debug("Rendered Images: ", self.rendered_pages)
 
-    def receivedRenderedImage(self):
+    def retrieveQueueResults(self):
         for rd_idx in range(self.render_num):
             rd = self.render_list[rd_idx]
             resultsQ = rd.resultsQ
@@ -296,11 +286,17 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
             size = resultsQ.qsize()
             for i in range(size):
                 item = resultsQ.get() # will be blocked until when some data are avaliable
-                filename, page_no, dpi, roi, img_byte_array = item
-                self.handleSingleRenderedImage(rd_idx, filename, page_no, dpi, roi, img_byte_array)
+                if item[0] == 'PAGESIZES_RES':
+                    _, filename, pages_size_inch = item
+                    if filename != self.current_filename: # the doc has changed, too late
+                        continue
+                    self.onPageSizesReceived(pages_size_inch)
+                elif item[0] == 'RENDER_RES':
+                    _, filename, page_no, dpi, roi, img_byte_array = item
+                    self.handleSingleRenderedImage(rd_idx, filename, page_no, dpi, roi, img_byte_array)
 
     def __rearrangePages(self):
-        if self.doc is None:
+        if len(self.current_pages_size_pix) == 0:
             return
 
         self.getVisibleRegions()
@@ -375,7 +371,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
     def setColumnNumber(self, colNum):
         if self.page_counts > 0:
             self.view_column_count = min(self.page_counts, colNum)
-            self.computePagesDPI(self.viewport().width())
+            self.computePagesDPI(self.viewport())
             self.__rearrangePages()
             self.renderCurrentVisiblePages()
             return True
@@ -385,7 +381,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
     def setPrecedingEmptyPage(self, emptyPages):
         if self.view_column_count > 1:
             self.leading_empty_pages = emptyPages
-            self.computePagesDPI(self.viewport().width())
+            self.computePagesDPI(self.viewport())
             self.__rearrangePages()
             self.renderCurrentVisiblePages()
             return True
@@ -402,7 +398,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
     def zoomFitWidth(self):
         self.fitwidth_flag = True
-        self.computePagesDPI(self.viewport().width())
+        self.computePagesDPI(self.viewport())
         self.__rearrangePages()
         self.renderCurrentVisiblePages()
     # def showEvent(self, ev):
@@ -426,7 +422,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
     def resizeEvent(self, ev):
         # debug('resizeEvent in DocGraphicsView')
         # 
-        self.computePagesDPI(self.viewport().width())
+        self.computePagesDPI(self.viewport())
         self.__rearrangePages()
         self.renderCurrentVisiblePages()
 
