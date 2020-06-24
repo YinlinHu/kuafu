@@ -2,11 +2,12 @@ from PyQt5 import QtCore
 from PyQt5 import QtGui
 
 # https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
-# MuPDF is much faster at rendering, but slower at loading and also use more memories
-BACKEND_MuPDF = False
+# MuPDF is much faster at rendering, but slower at loading (get_page_sizes()) and also use more memories
+BACKEND_MuPDF = True
 
 if BACKEND_MuPDF:
     import fitz
+    from popplerqt5 import Poppler # use poppler to load page sizes
 else: 
     from popplerqt5 import Poppler
 
@@ -42,7 +43,10 @@ class PdfRender(Process):
         self.requests_queue = {}
         
         if BACKEND_MuPDF:
-            self.doc = fitz.open(filename)
+            self.doc = fitz.open(self.filename)
+            # use poppler to load page sizes (much faster)
+            password = ""
+            self.doc_poppler = Poppler.Document.load(self.filename, password.encode(), password.encode())
         else:
             password = ""
             self.doc = Poppler.Document.load(self.filename, password.encode(), password.encode())
@@ -52,23 +56,32 @@ class PdfRender(Process):
                 | Poppler.Document.Antialiasing
                 )
 
+    def get_page_sizes_mupdf(self, doc):
+        pages_size_inch = []
+        page_counts = len(doc)
+        for i in range(page_counts):
+            page_rect = doc[i].MediaBox
+            pg_width = page_rect.width / 72.0 # width in inch
+            pg_height = page_rect.height / 72.0
+            pages_size_inch.append([pg_width, pg_height])
+        return pages_size_inch
+
+    def get_page_sizes_poppler(self, doc):
+        pages_size_inch = []
+        page_counts = doc.numPages()  
+        for i in range(page_counts):
+            pg_width = doc.page(i).pageSizeF().width() / 72.0 # width in inch
+            pg_height = doc.page(i).pageSizeF().height() / 72.0
+            pages_size_inch.append([pg_width, pg_height])  
+        return pages_size_inch
+
     def get_page_sizes(self):
         # extract page sizes for all pages
-        pages_size_inch = []
         if BACKEND_MuPDF:
-            page_counts = len(self.doc)
-            for i in range(page_counts):
-                page_rect = self.doc[i].MediaBox
-                pg_width = page_rect.width / 72.0
-                pg_height = page_rect.height / 72.0
-                pages_size_inch.append([pg_width, pg_height])
+            # return self.get_page_sizes_mupdf(self.doc)
+            return self.get_page_sizes_poppler(self.doc_poppler)
         else:
-            page_counts = self.doc.numPages()  
-            for i in range(page_counts):
-                pg_width = self.doc.page(i).pageSizeF().width() / 72.0 # width in inch
-                pg_height = self.doc.page(i).pageSizeF().height() / 72.0
-                pages_size_inch.append([pg_width, pg_height])    
-        return pages_size_inch  
+            return self.get_page_sizes_poppler(self.doc)
 
     def save_rendering_command(self, page_no, dpi, roi, visible_regions):
         if page_no in self.requests_queue:
@@ -164,7 +177,7 @@ class PdfRender(Process):
         print(self.pid)
 
         while self.exit_flag == False:
-            QtCore.QThread.msleep(10)
+            QtCore.QThread.msleep(50)
 
             self.receive_commands()
 

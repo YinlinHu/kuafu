@@ -27,7 +27,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.setupUi(self)
 
         self.screen_dpi = screen_dpi
-        self.thumb_view = thumbView
+        # self.thumb_view = thumbView
 
         self.splitter_main.setSizes([2,4]) # set relative widths of its children
 
@@ -85,7 +85,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         print(self.filename)
 
         self.preview_graphicsview.setDocument(self.filename, self.screen_dpi)
-        self.thumb_view.setDocument(self.filename, self.screen_dpi)
+        # self.thumb_view.setDocument(self.filename, self.screen_dpi)
         
         # self.readAnnotationRequested.emit(self.filename)
 
@@ -125,11 +125,11 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
                 parent_item.appendRow([item, dateItem])
 
     def setColumnNumber(self, colNum):
-        self.thumb_view.setColumnNumber(colNum)
+        # self.thumb_view.setColumnNumber(colNum)
         return self.preview_graphicsview.setColumnNumber(colNum)
 
     def setPrecedingEmptyPage(self, emptyNum):
-        self.thumb_view.setPrecedingEmptyPage(emptyNum)
+        # self.thumb_view.setPrecedingEmptyPage(emptyNum)
         return self.preview_graphicsview.setPrecedingEmptyPage(emptyNum)
 
     def zoomIn(self):
@@ -144,7 +144,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     def closeEvent(self, ev):
         debug('closeEvent in LibraryView')
         self.preview_graphicsview.close()
-        self.thumb_view.close()
+        # self.thumb_view.close()
         
         # #  wait for the reader thread to exit
         # loop = QtCore.QEventLoop()

@@ -38,15 +38,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         super(MainWindow, self).__init__() # Call the inherited classes __init__ method
         self.setupUi(self)
 
-        self.dockWidget = QtWidgets.QDockWidget('Dock Test', self)
-        self.thumbView = DocGraphicsView(self.dockWidget, render_num=2)
-        self.dockWidget.setWidget(self.thumbView)
-        self.dockWidget.setFloating(False)
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.dockWidget)
+        # self.dockWidget = QtWidgets.QDockWidget('Dock Test', self)
+        # self.thumbView = DocGraphicsView(self.dockWidget, render_num=2)
+        # self.dockWidget.setWidget(self.thumbView)
+        # self.dockWidget.setFloating(False)
+        # self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.dockWidget)
 
         self.screen_dpi = screens[0].logicalDotsPerInch()
         
-        self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi, self.thumbView)
+        self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi, None)
         self.libWidget.preview_graphicsview.pagePositionChanged.connect(self.setPageInfoOnToolbar)
         self.centraltabwidget.addTab(self.libWidget, "My Library")
         
