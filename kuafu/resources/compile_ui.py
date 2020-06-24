@@ -19,4 +19,4 @@ def compileUIFiles(indir):
   print("Done.")
 
 if __name__ == '__main__':
-  compileUIFiles('./resources/')
+  compileUIFiles('./kuafu/resources/')

@@ -18,6 +18,9 @@ import numpy as np
 
 class DocGraphicsView(QtWidgets.QGraphicsView):
     pagePositionChanged = QtCore.pyqtSignal(int, int)
+    zoomRatioChanged = QtCore.pyqtSignal(float)
+    viewColumnChanged = QtCore.pyqtSignal(int)
+    emptyLeadingPageChanged = QtCore.pyqtSignal(int)
 
     def __init__(self, parent, render_num=4):
         super(DocGraphicsView, self).__init__(parent)
@@ -29,10 +32,9 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
         self.current_cursor_x = 0
         self.current_cursor_y = 0
-        self.mouse_pressed = False
 
         self.setScene(self.scene)
-        
+
         self.page_items = [] # instances of PageGraphicsItem
 
         self.current_filename = None
@@ -40,6 +42,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.page_counts = 0
         self.pages_size_inch = [] # (width, height) in inch, invarient
         self.current_pages_size_pix = [] # varient depends on the view
+        self.current_pages_rect = [] # one for flag and 4 for scene coordinates
 
         self.current_page = 0
         self.current_visible_regions = {}
@@ -56,15 +59,17 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
             tmpRender.start()
             self.render_list.append(tmpRender)
 
-        self.fitwidth_flag = True
         self.screen_dpi = 0
+
+        self.zoom_levels = [0.12, 0.25, 0.33, 0.50, 0.66, 0.75, 1.0, 1.25, 1.5, 2.0, 4.0, 8.0, 16.0]
+        self.current_zoom_index = -1
+        self.fitwidth_flag = True
 
         self.horispacing = 3
         self.vertspacing = 3
 
-        # there are cases unwanted, making GUI slower
-        # self.horizontalScrollBar().valueChanged.connect(self.onViewportChanged)
-        # self.verticalScrollBar().valueChanged.connect(self.onViewportChanged)
+        self.horizontalScrollBar().valueChanged.connect(self.onViewportChanged)
+        self.verticalScrollBar().valueChanged.connect(self.onViewportChanged)
 
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
@@ -80,6 +85,12 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
         self.setTransform(QtGui.QTransform()) # set identity matrix for transformation
 
+        # resize handler
+        self.resized_flag = False
+        self.resize_timer = QtCore.QTimer(self)
+        self.resize_timer.timeout.connect(self.resizeHandler)
+        self.resize_timer.start(500)
+
         # read the queue periodically
         self.queue_timer = QtCore.QTimer(self)
         self.queue_timer.timeout.connect(self.retrieveQueueResults)
@@ -90,6 +101,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.page_items = []
         self.pages_size_inch = [] # (width, height) in inch, invarient
         self.current_pages_size_pix = [] # varient depends on the view
+        self.current_pages_rect = []
         self.current_visible_regions = {}
         self.current_rendering_dpi = []
         self.rendered_info = {}
@@ -123,7 +135,7 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         time_a = time.time()
         debug('A', time_a - time_0)
 
-        self.computePagesDPI(self.viewport())
+        self.computePagesDPI()
         time_b = time.time()
         debug('B', time_b - time_a)
 
@@ -136,33 +148,52 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         debug('D', time_d - time_c)
 
         self.pagePositionChanged.emit(self.current_page, self.page_counts)
+        self.setColumnNumber(min(self.view_column_count, self.page_counts))
+        self.setPrecedingEmptyPage(0)
 
     def onViewportChanged(self):
         self.renderCurrentVisiblePages()
         self.pagePositionChanged.emit(self.current_page, self.page_counts)
 
-    def computePagesDPI(self, viewport):
+    def computePagesDPI(self):
+        self.current_rendering_dpi = []
+        self.current_pages_size_pix =[]
+        if self.page_counts == 0:
+            return
+
         if self.fitwidth_flag:
+            # all pages will have the same width, but may different height
+            viewport = self.viewport()
             viewWidth = viewport.width()
             viewHeight = viewport.height()
             
-            # all pages will have the same width, but may different height
-            self.current_rendering_dpi = []
-            self.current_pages_size_pix =[]
-
             viewWidth -= (self.horispacing * (self.view_column_count + 1))
             viewWidth /= self.view_column_count
             
+            avg_zLevel = 0 # compute the nearest zoom level for fitting width mode
             for i in range(self.page_counts):
                 dpi = viewWidth / self.pages_size_inch[i][0]
                 height = self.pages_size_inch[i][1] * dpi
                 self.current_rendering_dpi.append(dpi)
                 self.current_pages_size_pix.append([int(viewWidth), int(height)])
+                # 
+                avg_zLevel += (dpi / self.screen_dpi)
+            # 
+            avg_zLevel /= self.page_counts
+            candi_zLevels = np.array(self.zoom_levels)
+            diff = np.abs(candi_zLevels - avg_zLevel)
+            self.current_zoom_index = np.argmin(diff)
         else:
-            pass
+            zLevel = self.zoom_levels[self.current_zoom_index]
+            dpi = self.screen_dpi * zLevel # every page will have the same dpi
+            for i in range(self.page_counts):
+                width = self.pages_size_inch[i][0] * dpi
+                height = self.pages_size_inch[i][1] * dpi
+                self.current_rendering_dpi.append(dpi)
+                self.current_pages_size_pix.append([int(width), int(height)])
 
     def getVisibleRegions(self):
-        visRect = self.viewport().rect() # visible area (without scrollbars)
+        visRect = self.viewport().rect() # visible area
         if visRect.isEmpty():
             self.current_visible_regions = {}
             return
@@ -171,13 +202,12 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         # 
         regions = {}
         for pg_no in range(self.page_counts):
-            pos = self.page_items[pg_no].scenePos()
-            rect = self.page_items[pg_no].boundingRect()
-            pageRect = QtCore.QRectF(pos.x(), pos.y(), rect.width(), rect.height())
+            flag, x, y, w, h = self.current_pages_rect[pg_no]
+            pageRect = QtCore.QRectF(x, y, w, h)
             intsec = visRect.intersected(pageRect)
             # change to item coordinate
             intsec = QtCore.QRectF(
-                intsec.x() - pos.x(), intsec.y() - pos.y(), 
+                intsec.x() - x, intsec.y() - y, 
                 intsec.width(), intsec.height()
                 )
             if intsec.isEmpty():
@@ -198,6 +228,11 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
 
         # update the cached images for visible pages first (for smoothing transitions)
         for page_no in self.current_visible_regions:
+            # initilize page first
+            if not self.current_pages_rect[page_no][0]:
+                _, x, y, w, h = self.current_pages_rect[page_no]
+                self.page_items[page_no].initialize(x, y, w, h)
+                self.current_pages_rect[page_no][0] = True
             self.page_items[page_no].updateTransientItems(self.current_visible_regions[page_no])
 
         # first key as current page
@@ -341,19 +376,13 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         rowCumHeights = np.cumsum(rowHeights)
         colCumWidths = np.cumsum(colWidths)
 
+        self.current_pages_rect = []
         for i in range(self.page_counts):
             row = int((i + self.leading_empty_pages) / self.view_column_count)
             col = int((i + self.leading_empty_pages) % self.view_column_count)
 
-            if col == 0:
-                startx = 0
-            else:
-                startx = colCumWidths[col - 1]
-
-            if row == 0:
-                starty = 0
-            else:
-                starty = rowCumHeights[row - 1]
+            startx = colCumWidths[col - 1] if col > 0 else 0
+            starty = rowCumHeights[row - 1] if row > 0 else 0
 
             # add spacing 
             startx += (self.horispacing * (col + 1))
@@ -363,8 +392,11 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
             startx += (colWidths[col] - pages_width_pix[row][col]) / 2
             starty += (rowHeights[row] - pages_height_pix[row][col]) / 2
 
-            self.page_items[i].setSize(pages_width_pix[row][col], pages_height_pix[row][col])
-            self.page_items[i].setPosition(startx, starty)
+            # save page rect, False means uninitialized
+            self.current_pages_rect.append([False, startx, starty, pages_width_pix[row][col], pages_height_pix[row][col]])
+            
+            # make all pages invisible first
+            self.page_items[i].setVisible(False)
 
         sceneWidthFix = colWidths.sum() + (self.view_column_count + 1) * self.horispacing
         sceneHeightFix = rowHeights.sum() + (rowNum + 1) * self.vertspacing
@@ -374,25 +406,40 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         # that means, everything should be re-rendered
         self.rendered_info = {}
 
-    def __resizePages(self, ratio):
+    def getPageByPos(self, view_x, view_y):
+        item = self.itemAt(view_x, view_y)
+        if item:
+            item = item.parentItem() if item.parentItem() else item
+            assert(isinstance(item, PageGraphicsItem))
+            page_no_cursor_at = self.page_items.index(item)
+        else:
+            # at empty places, find the nearest page
+            scene_pos = self.mapToScene(view_x, view_y)
+            page_rects = np.array(self.current_pages_rect)[:, 1:]
+            pages_cx = page_rects[:, 0] + page_rects[:, 2] / 2
+            pages_cy = page_rects[:, 1] + page_rects[:, 3] / 2
+            distance = np.abs(pages_cx - scene_pos.x()) + np.abs(pages_cy - scene_pos.y()) # L1 distance is enough
+            page_no_cursor_at = np.argmin(distance)
+        return page_no_cursor_at
 
-        # make sure the page size will not be too large or too small
-        firstPageDpi = self.current_rendering_dpi[0] * ratio
-        if firstPageDpi < 5 or firstPageDpi > 1200:
+    def redrawPages(self):
+        if self.page_counts == 0 or len(self.current_pages_rect) == 0:
             return
 
         time_0 = time.time()
 
         # save previous cursor position
-        viewRect = self.viewport()
+        page_no_cursor_at = self.getPageByPos(self.current_cursor_x, self.current_cursor_y)
+        _, x, y, w, h = self.current_pages_rect[page_no_cursor_at]
         cursor_in_scene = self.mapToScene(self.current_cursor_x, self.current_cursor_y)
-        scene_cx = cursor_in_scene.x() * ratio - (self.current_cursor_x - viewRect.width() / 2)
-        scene_cy = cursor_in_scene.y() * ratio - (self.current_cursor_y - viewRect.height() / 2)
+        x_ratio = (cursor_in_scene.x() - x) / w # the relative position
+        y_ratio = (cursor_in_scene.y() - y) / h
+        viewRect = self.viewport()
+        dx_center = viewRect.width() / 2 - self.current_cursor_x
+        dy_center = viewRect.height() / 2 - self.current_cursor_y
 
-        for i in range(self.page_counts):
-            self.current_pages_size_pix[i][0] *= ratio
-            self.current_pages_size_pix[i][1] *= ratio
-            self.current_rendering_dpi[i] *= ratio
+        # compute DPI
+        self.computePagesDPI()
 
         time_a = time.time()
         debug("A ", time_a - time_0)
@@ -401,46 +448,54 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         time_b = time.time()
         debug("B ", time_b - time_a)
 
-        # set viewport
+        # set viewport after rearranging (make page position under cursor unchanged)
+        _, new_x, new_y, new_w, new_h = self.current_pages_rect[page_no_cursor_at]
+        scene_cx = new_x + x_ratio * new_w + dx_center
+        scene_cy = new_y + y_ratio * new_h + dy_center
         self.centerOn(scene_cx, scene_cy)
 
+        # view changed, re-render
         self.renderCurrentVisiblePages()
+
         time_c = time.time()
         debug("C ", time_c - time_b)
 
     def setColumnNumber(self, colNum):
         if self.page_counts > 0:
             self.view_column_count = min(self.page_counts, colNum)
-            self.computePagesDPI(self.viewport())
-            self.__rearrangePages()
-            self.renderCurrentVisiblePages()
-            return True
-        else:
-            return False
+            self.redrawPages()
+            self.viewColumnChanged.emit(self.view_column_count)
 
     def setPrecedingEmptyPage(self, emptyPages):
-        if self.view_column_count > 1:
-            self.leading_empty_pages = emptyPages
-            self.computePagesDPI(self.viewport())
-            self.__rearrangePages()
-            self.renderCurrentVisiblePages()
-            return True
-        else:
-            return False
+        if self.page_counts > 0:
+            if self.view_column_count > 1:
+                self.leading_empty_pages = emptyPages
+            else:
+                self.leading_empty_pages = 0
+            self.redrawPages()
+            self.emptyLeadingPageChanged.emit(self.leading_empty_pages)
 
     def zoomIn(self):
-        self.__resizePages(1.5)
+        if self.current_zoom_index == len(self.zoom_levels) - 1:
+            return
+        self.current_zoom_index += 1
         self.fitwidth_flag = False
+        self.redrawPages()
+        self.zoomRatioChanged.emit(self.zoom_levels[self.current_zoom_index])
 
     def zoomOut(self):
-        self.__resizePages(0.5)
+        if self.current_zoom_index == 0:
+            return
+        self.current_zoom_index -= 1
         self.fitwidth_flag = False
+        self.redrawPages()
+        self.zoomRatioChanged.emit(self.zoom_levels[self.current_zoom_index])
 
     def zoomFitWidth(self):
         self.fitwidth_flag = True
-        self.computePagesDPI(self.viewport())
-        self.__rearrangePages()
-        self.renderCurrentVisiblePages()
+        self.redrawPages()
+        self.zoomRatioChanged.emit(0)
+
     # def showEvent(self, ev):
     #     debug('showEvent in DocGraphicsView')
     #     ev.ignore()
@@ -459,13 +514,14 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         self.render_list = []
         self.render_num = 0
 
+    def resizeHandler(self):
+        if self.resized_flag:
+            self.redrawPages()
+            self.resized_flag = False
+
     def resizeEvent(self, ev):
         # debug('resizeEvent in DocGraphicsView')
-        # 
-        # self.computePagesDPI(self.viewport())
-        # self.__rearrangePages()
-        # self.renderCurrentVisiblePages()
-
+        self.resized_flag = True
         # call the parent's handler, it will do some alignments
         super().resizeEvent(ev)
 
@@ -475,33 +531,33 @@ class DocGraphicsView(QtWidgets.QGraphicsView):
         if modifiers == QtCore.Qt.ControlModifier:
             delta = ev.angleDelta()
             if delta.y() > 0:
-                self.__resizePages(1.2)
+                self.zoomIn()
             else:
-                self.__resizePages(0.8)
-            self.fitwidth_flag = False
+                self.zoomOut()
             ev.accept() # accept an event in order to stop it from propagating further
         else:
             super().wheelEvent(ev) # call parent's handler, making the view scrolled (touch included)
-            self.onViewportChanged()
 
     def mousePressEvent(self, ev):
         # debug('mousePressEvent in DocGraphicsView')
-        self.mouse_pressed = True
         super().mousePressEvent(ev)
 
     def mouseReleaseEvent(self, ev):
         # debug('mouseReleaseEvent in DocGraphicsView')
-        self.mouse_pressed = False
         super().mouseReleaseEvent(ev)
 
     def mouseDoubleClickEvent(self, ev):
         # debug('mouseDoubleClickEvent in DocGraphicsView')
+        self.current_zoom_index = 6 # magic number, TODO
+        assert(self.zoom_levels[self.current_zoom_index] == 1.0)
+        self.fitwidth_flag = False
+        self.redrawPages()
+        self.zoomRatioChanged.emit(self.zoom_levels[self.current_zoom_index])
+        # 
         super().mouseDoubleClickEvent(ev)
 
     def mouseMoveEvent(self, ev):
         # debug('mouseMoveEvent in DocGraphicsView')
-        if self.mouse_pressed:
-            self.onViewportChanged() # detect drag
         self.current_cursor_x = ev.x()
         self.current_cursor_y = ev.y()
         # debug(self.current_cursor_x, self.current_cursor_y)

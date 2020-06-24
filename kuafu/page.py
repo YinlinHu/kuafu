@@ -41,7 +41,7 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
         self.setBrush(QtCore.Qt.white) # fill white color
 
         # pixmaps
-        self.patch_basesize = 600
+        self.patch_basesize = 800
         self.patch_rects = []
         self.patch_row_num = 0
         self.patch_col_num = 0
@@ -65,46 +65,37 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
         self.setZValue(0)
         self.maskItem.setZValue(3)
         # 0: self, 1: transient, 2: current, 3: mask
-        
-    def setPosition(self, x, y):
-        self.setPos(x, y)
 
-    def setSize(self, width, height):
+    def initialize(self, x, y, width, height):
         self.patch_rects = self.compute_patch_rects(width, height)
 
         # may be called many times before the first addPixmap()
         current_width = self.rect().width()
-        if current_width > 0:
-            ratio_thistime = width / current_width
-        else:
-            ratio_thistime = 1.0
+        ratio_thistime = width / current_width if current_width > 0 else 1.0
 
+        self.setPos(x, y)
         self.setRect(0, 0, width, height)
         self.maskItem.setRect(0, 0, 0, 0)
 
         # remove all transient items
         for pid in self.cached_pixmaps:
-            item = self.cached_pixmaps[pid]['associated_item']
-            if item:
-                item.setParentItem(None)
-                self.cached_pixmaps[pid]['associated_item'] = None
+            associated_item = self.cached_pixmaps[pid]['item']
+            if associated_item:
+                associated_item.setParentItem(None)
+                self.cached_pixmaps[pid]['item'] = None
 
         # remove all current items (move their pixmaps to cache)
         for pid in self.current_items:
             self.current_items[pid]['item'].setParentItem(None)
-            # 
-            self.cached_pixmaps[pid] = {
-                "pixmap": self.current_items[pid]['pixmap'],
-                "dx": self.current_items[pid]['dx'],
-                "dy": self.current_items[pid]['dy'],
-                "ratio": self.current_items[pid]['ratio'],
-                "associated_item": None
-            }
+            self.cached_pixmaps[pid] = self.current_items[pid]
+            self.cached_pixmaps[pid]['item'] = None
         self.current_items = {}
 
         # update the ratio in cached pixmaps
         for pid in self.cached_pixmaps:
             self.cached_pixmaps[pid]['ratio'] *= ratio_thistime
+
+        self.setVisible(True)
 
     def updateTransientItems(self, visibleRect):
         for pid in self.cached_pixmaps:
@@ -112,7 +103,7 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
             raw_dx = self.cached_pixmaps[pid]['dx']
             raw_dy = self.cached_pixmaps[pid]['dy']
             ratio = self.cached_pixmaps[pid]['ratio']
-            associated_item = self.cached_pixmaps[pid]['associated_item']
+            associated_item = self.cached_pixmaps[pid]['item']
             # 
             x = raw_dx * ratio
             y = raw_dy * ratio
@@ -124,7 +115,7 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
             if irect.isEmpty(): # remove associated transient item if unvisible
                 if associated_item:
                     associated_item.setParentItem(None)
-                    self.cached_pixmaps[pid]['associated_item'] = None
+                    self.cached_pixmaps[pid]['item'] = None
             else:               
                 # crop the visible part
                 if False:
@@ -169,7 +160,7 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
                     item = QtWidgets.QGraphicsPixmapItem(resized_pixmap, parent=self)
                     item.setOffset(irect.x(), irect.y())
                     item.setZValue(1)
-                    self.cached_pixmaps[pid]['associated_item'] = item
+                    self.cached_pixmaps[pid]['item'] = item
 
     def get_roi_patches(self, roi_rect):
         patch_positions = []
@@ -261,7 +252,7 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
         item.setZValue(2)
 
         current_id = self.get_containing_patch_id(dx + pixmap.width() / 2, dy + pixmap.height() / 2)
-        debug("Add current patch id: ", current_id)
+        # debug("Add current patch id: ", current_id)
 
         self.current_items[current_id] = {
             "item": item,
@@ -276,12 +267,13 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
         for cached_id in self.cached_pixmaps:
             if cached_id == current_id or self.isChildPatch(cached_id, current_id):
                 pidToRemove.append(cached_id)
-                debug("Remove cached patch id: ", cached_id)
+                # debug("Remove cached patch id: ", cached_id)
         for pid in pidToRemove:
             self.removeCachedPixmap(pid)
 
         # debug
-        if True:
+        # if True:
+        if False:
             outStr = ("Current items (%d): " % len(self.current_items))
             for pid in self.current_items:
                 outStr += ("%d " % pid)
@@ -294,7 +286,7 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
         
     def removeCachedPixmap(self, pid):
         if pid in self.cached_pixmaps:
-            associated_item = self.cached_pixmaps[pid]['associated_item']
+            associated_item = self.cached_pixmaps[pid]['item']
             if associated_item:
                 associated_item.setParentItem(None)
             self.cached_pixmaps.pop(pid)

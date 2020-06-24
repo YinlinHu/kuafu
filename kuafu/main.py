@@ -15,8 +15,8 @@ parentDir = os.path.dirname(currentDir)
 # debug(currentDir)
 # debug(parentDir)
 sys.path.append(currentDir)
-sys.path.append(parentDir)
-sys.path.append(parentDir + os.path.sep + 'resources')
+# sys.path.append(parentDir)
+sys.path.append(currentDir + os.path.sep + 'resources')
 
 from utils import debug
 
@@ -48,6 +48,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         
         self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi, None)
         self.libWidget.preview_graphicsview.pagePositionChanged.connect(self.setPageInfoOnToolbar)
+        self.libWidget.preview_graphicsview.zoomRatioChanged.connect(self.onZoomRatioChanged)
+        self.libWidget.preview_graphicsview.viewColumnChanged.connect(self.onViewColumnChanged)
+        self.libWidget.preview_graphicsview.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
         self.centraltabwidget.addTab(self.libWidget, "My Library")
         
         self.centraltabwidget.setTabsClosable(True)
@@ -89,6 +92,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         self.zoominAction.triggered.connect(self.zoomIn)
         self.zoomoutAction.triggered.connect(self.zoomOut)
         self.zoomFitwidthAction.triggered.connect(self.zoomFitWidth)
+        
+        self.zoomFitwidthAction.setChecked(True)
 
         self.actionViewInOneColumn.triggered.connect(self.onViewInOneColumn)
         self.actionViewInTwoColumns.triggered.connect(self.onViewInTwoColumns)
@@ -203,37 +208,26 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
-        if widget.setColumnNumber(1):
-            self.actionViewInOneColumn.setChecked(True)
-            self.actionViewInTwoColumns.setChecked(False)
-            self.actionViewInFourColumns.setChecked(False)
+        widget.setColumnNumber(1)
 
     def onViewInTwoColumns(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
-        if widget.setColumnNumber(2):
-            self.actionViewInOneColumn.setChecked(False)
-            self.actionViewInTwoColumns.setChecked(True)
-            self.actionViewInFourColumns.setChecked(False)
+        widget.setColumnNumber(2)
 
     def onViewInFourColumns(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
-        if widget.setColumnNumber(4):
-            self.actionViewInOneColumn.setChecked(False)
-            self.actionViewInTwoColumns.setChecked(False)
-            self.actionViewInFourColumns.setChecked(True)
+        widget.setColumnNumber(4)
 
     def onPrecedingEmptyPage(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
         if self.actionPrecedingEmptyPage.isChecked():
-            ret = widget.setPrecedingEmptyPage(1)
-            if not ret:
-                self.actionPrecedingEmptyPage.setChecked(False)
+            widget.setPrecedingEmptyPage(1)
         else:
             widget.setPrecedingEmptyPage(0)
 
@@ -241,18 +235,21 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
+        self.zoomFitwidthAction.setChecked(False)
         widget.zoomIn()
 
     def zoomOut(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
+        self.zoomFitwidthAction.setChecked(False)
         widget.zoomOut()
 
     def zoomFitWidth(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
         # if isinstance(widget, DocumentView):
+        self.zoomFitwidthAction.setChecked(True)
         widget.zoomFitWidth()
 
     def goPrevPage(self):
@@ -277,6 +274,37 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         if isinstance(widget, DocumentView):
             widget.gotoPage(page_no - 1)
             self.pageNoEdit.clearFocus()
+
+    def onZoomRatioChanged(self, zoomRatio):
+        if zoomRatio == 0:
+            self.showStatus("Zoom fitted to width")
+        else:
+            self.zoomFitwidthAction.setChecked(False)
+            self.showStatus("Zoom to %d%%" % int(zoomRatio * 100))
+    
+    def onViewColumnChanged(self, viewColumn):
+        if viewColumn == 1:
+            self.actionViewInOneColumn.setChecked(True)
+            self.actionViewInTwoColumns.setChecked(False)
+            self.actionViewInFourColumns.setChecked(False)
+        elif viewColumn == 2:
+            self.actionViewInOneColumn.setChecked(False)
+            self.actionViewInTwoColumns.setChecked(True)
+            self.actionViewInFourColumns.setChecked(False)
+        elif viewColumn == 4:
+            self.actionViewInOneColumn.setChecked(False)
+            self.actionViewInTwoColumns.setChecked(False)
+            self.actionViewInFourColumns.setChecked(True)
+        else:
+            assert(0)
+
+    def onEmptyLeadingPageChanged(self, emptyPages):
+        if emptyPages == 0:
+            self.actionPrecedingEmptyPage.setChecked(False)
+        elif emptyPages == 1:
+            self.actionPrecedingEmptyPage.setChecked(True)
+        else:
+            assert(0)
 
     def setPageInfoOnToolbar(self, current_idx, total_count):
         self.pageNoEdit.setMaxLength(len(str(total_count)))

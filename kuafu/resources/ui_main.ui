@@ -282,6 +282,9 @@
    </property>
   </action>
   <action name="zoomFitwidthAction">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
    <property name="icon">
     <iconset resource="resources.qrc">
      <normaloff>:/icons/zoom-fit-width.svg</normaloff>:/icons/zoom-fit-width.svg</iconset>
