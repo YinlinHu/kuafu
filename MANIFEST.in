@@ -1,2 +1,7 @@
-include resources/kuafu.desktop
-include resources/icons/kuafu.svg
+include kuafu/resources/kuafu.desktop
+include kuafu/resources/icons/kuafu.svg
+include kuafu/resources/resources_rc.py
+include kuafu/resources/ui_annotation_item.py
+include kuafu/resources/ui_document.py
+include kuafu/resources/ui_library.py
+include kuafu/resources/ui_main.py

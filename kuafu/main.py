@@ -38,16 +38,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         super(MainWindow, self).__init__() # Call the inherited classes __init__ method
         self.setupUi(self)
 
-        # self.dockWidget = QtWidgets.QDockWidget('Dock Test', self)
-        # self.thumbView = DocGraphicsView(self.dockWidget, render_num=2)
-        # self.dockWidget.setWidget(self.thumbView)
-        # self.dockWidget.setFloating(False)
-        # self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.dockWidget)
-
         self.screen_dpi = screens[0].logicalDotsPerInch()
         
-        self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi, None)
-        self.libWidget.preview_graphicsview.pagePositionChanged.connect(self.setPageInfoOnToolbar)
+        self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi)
+        self.libWidget.preview_graphicsview.viewportChanged.connect(self.setPageInfoOnToolbar)
         self.libWidget.preview_graphicsview.zoomRatioChanged.connect(self.onZoomRatioChanged)
         self.libWidget.preview_graphicsview.viewColumnChanged.connect(self.onViewColumnChanged)
         self.libWidget.preview_graphicsview.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
@@ -97,7 +91,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
 
         self.actionViewInOneColumn.triggered.connect(self.onViewInOneColumn)
         self.actionViewInTwoColumns.triggered.connect(self.onViewInTwoColumns)
-        self.actionViewInFourColumns.triggered.connect(self.onViewInFourColumns)
         self.actionPrecedingEmptyPage.triggered.connect(self.onPrecedingEmptyPage)
 
         # default is one column
@@ -137,7 +130,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         self.toolBar.addSeparator()
         self.toolBar.addAction(self.actionViewInOneColumn)
         self.toolBar.addAction(self.actionViewInTwoColumns)
-        self.toolBar.addAction(self.actionViewInFourColumns)
         self.toolBar.addAction(self.actionPrecedingEmptyPage)
         self.toolBar.addSeparator()
         # self.toolBar.addAction(self.firstPageAction)
@@ -216,12 +208,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         # if isinstance(widget, DocumentView):
         widget.setColumnNumber(2)
 
-    def onViewInFourColumns(self):
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        widget.setColumnNumber(4)
-
     def onPrecedingEmptyPage(self):
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
@@ -253,27 +239,27 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         widget.zoomFitWidth()
 
     def goPrevPage(self):
-        debug("goPrevPage")
+        debug("goPrevPage in MainWindow")
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
-        if isinstance(widget, DocumentView):
-            widget.goPrevPage()
+        # if isinstance(widget, DocumentView):
+        widget.goPrevPage()
 
     def goNextPage(self):
-        debug("goNextPage")
+        debug("goNextPage in MainWindow")
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
-        if isinstance(widget, DocumentView):
-            widget.goNextPage()
+        # if isinstance(widget, DocumentView):
+        widget.goNextPage()
 
     def gotoPage(self):
-        debug("gotoPage")
+        debug("gotoPage in MainWindow")
         page_no = int(self.pageNoEdit.text())
         cIdx = self.centraltabwidget.currentIndex()
         widget = self.centraltabwidget.widget(cIdx)
-        if isinstance(widget, DocumentView):
-            widget.gotoPage(page_no - 1)
-            self.pageNoEdit.clearFocus()
+        # if isinstance(widget, DocumentView):
+        widget.gotoPage(page_no - 1)
+        self.pageNoEdit.clearFocus()
 
     def onZoomRatioChanged(self, zoomRatio):
         if zoomRatio == 0:
@@ -286,15 +272,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         if viewColumn == 1:
             self.actionViewInOneColumn.setChecked(True)
             self.actionViewInTwoColumns.setChecked(False)
-            self.actionViewInFourColumns.setChecked(False)
         elif viewColumn == 2:
             self.actionViewInOneColumn.setChecked(False)
             self.actionViewInTwoColumns.setChecked(True)
-            self.actionViewInFourColumns.setChecked(False)
-        elif viewColumn == 4:
-            self.actionViewInOneColumn.setChecked(False)
-            self.actionViewInTwoColumns.setChecked(False)
-            self.actionViewInFourColumns.setChecked(True)
         else:
             assert(0)
 
@@ -306,10 +286,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         else:
             assert(0)
 
-    def setPageInfoOnToolbar(self, current_idx, total_count):
-        self.pageNoEdit.setMaxLength(len(str(total_count)))
-        self.pageNoEdit.setText("%d" % (current_idx +1))
-        self.pageCountAction.setText("%d" % total_count)
+    def setPageInfoOnToolbar(self, filename, page_counts, visible_regions):
+        if len(visible_regions) == 0:
+            return
+        curent_page_idx = next(iter(visible_regions)) # fetch first key
+        # 
+        self.pageNoEdit.setMaxLength(len(str(page_counts)))
+        self.pageNoEdit.setText("%d" % (curent_page_idx +1))
+        self.pageCountAction.setText("%d" % page_counts)
 
     def addRecentFiles(self):
         self.recent_files_actions[:] = [] # pythonic way to clear list
@@ -353,7 +337,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         # self.centraltabwidget.setCurrentWidget(widget)
 
         # self.annotview_model.removeRows(0, self.annotview_model.rowCount())
-        self.libWidget.preview_graphicsview.setDocument(filename, self.screen_dpi)
+        self.libWidget.setDocument(filename, self.screen_dpi)
         
 
     def openFile(self):

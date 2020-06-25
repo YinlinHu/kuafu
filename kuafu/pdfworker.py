@@ -3,7 +3,9 @@ from PyQt5 import QtGui
 
 # https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
 # MuPDF is much faster at rendering, but slower at loading (get_page_sizes()) and also use more memories
-BACKEND_MuPDF = True
+# 
+# TODO Mupdf freezed very often
+BACKEND_MuPDF = False
 
 if BACKEND_MuPDF:
     import fitz
@@ -177,7 +179,7 @@ class PdfRender(Process):
         print(self.pid)
 
         while self.exit_flag == False:
-            QtCore.QThread.msleep(50)
+            QtCore.QThread.msleep(20)
 
             self.receive_commands()
 

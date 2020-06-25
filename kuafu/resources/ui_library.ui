@@ -27,31 +27,109 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QSplitter" name="splitter_main">
+    <widget class="QSplitter" name="splitter">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>0</height>
+      </size>
+     </property>
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
      </property>
-     <widget class="QSplitter" name="splitter_1">
+     <property name="childrenCollapsible">
+      <bool>false</bool>
+     </property>
+     <widget class="QTabWidget" name="tabWidget_2">
+      <property name="minimumSize">
+       <size>
+        <width>200</width>
+        <height>0</height>
+       </size>
+      </property>
       <property name="maximumSize">
        <size>
-        <width>16777215</width>
+        <width>600</width>
         <height>16777215</height>
+       </size>
+      </property>
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="tab_3">
+       <attribute name="title">
+        <string>Tab 1</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontal_Layout">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+        <item>
+         <widget class="QSplitter" name="splitter_1">
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <widget class="QTreeView" name="fileview">
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>16777215</height>
+            </size>
+           </property>
+          </widget>
+          <widget class="QTreeView" name="annotview"/>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tab_4">
+       <attribute name="title">
+        <string>Tab 2</string>
+       </attribute>
+      </widget>
+     </widget>
+     <widget class="QSplitter" name="splitter_doc">
+      <property name="minimumSize">
+       <size>
+        <width>600</width>
+        <height>0</height>
        </size>
       </property>
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QTreeView" name="fileview">
-       <property name="maximumSize">
-        <size>
-         <width>16777215</width>
-         <height>16777215</height>
-        </size>
-       </property>
-      </widget>
-      <widget class="QTreeView" name="annotview"/>
+      <widget class="DocGraphicsView" name="preview_graphicsview"/>
+      <widget class="DocGraphicsView" name="preview_graphicsview_2"/>
      </widget>
-     <widget class="DocGraphicsView" name="preview_graphicsview"/>
+     <widget class="ThumbGraphicsView" name="thumb_graphicsview">
+      <property name="minimumSize">
+       <size>
+        <width>150</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>600</width>
+        <height>16777215</height>
+       </size>
+      </property>
+     </widget>
     </widget>
    </item>
   </layout>
@@ -61,6 +139,11 @@
    <class>DocGraphicsView</class>
    <extends>QGraphicsView</extends>
    <header>docgraphicsview.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ThumbGraphicsView</class>
+   <extends>QGraphicsView</extends>
+   <header>thumbgraphicsview.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

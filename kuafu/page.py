@@ -28,8 +28,10 @@ def QImg2cvImg(qImg):
     return arr
 
 class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
-    def __init__(self, parent=None):
+    def __init__(self, pageIdx, parent=None):
         super(PageGraphicsItem, self).__init__(parent)
+
+        self.pageIdx = pageIdx 
 
         self.setRect(0,0,0,0)
         self.setPos(0, 0)
@@ -39,6 +41,13 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
         # pen.setWidth(1)
         self.setPen(pen)
         self.setBrush(QtCore.Qt.white) # fill white color
+
+        self.borderItem = QtWidgets.QGraphicsRectItem()
+        self.borderItem.setRect(0, 0, 0, 0)
+        pen = QtGui.QPen(QtCore.Qt.gray)
+        pen.setWidth(1)
+        self.borderItem.setPen(pen)
+        self.borderItem.setParentItem(self)
 
         # pixmaps
         self.patch_basesize = 800
@@ -63,8 +72,9 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
 
         # 
         self.setZValue(0)
-        self.maskItem.setZValue(3)
-        # 0: self, 1: transient, 2: current, 3: mask
+        self.borderItem.setZValue(3)
+        self.maskItem.setZValue(4)
+        # 0: self, 1: transient, 2: current, 3: border, 4: mask
 
     def initialize(self, x, y, width, height):
         self.patch_rects = self.compute_patch_rects(width, height)
@@ -75,7 +85,16 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
 
         self.setPos(x, y)
         self.setRect(0, 0, width, height)
-        self.maskItem.setRect(0, 0, 0, 0)
+        self.borderItem.setRect(0, 0, width, height)
+
+        # set mask item accordingly
+        mask_rect = self.maskItem.rect()
+        self.maskItem.setRect(
+            mask_rect.x() * ratio_thistime, 
+            mask_rect.y() * ratio_thistime, 
+            mask_rect.width() * ratio_thistime, 
+            mask_rect.height() * ratio_thistime
+        )
 
         # remove all transient items
         for pid in self.cached_pixmaps:
@@ -96,6 +115,24 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
             self.cached_pixmaps[pid]['ratio'] *= ratio_thistime
 
         self.setVisible(True)
+
+    def setBorderHighlight(self, active):
+        if active:
+            self.borderItem.setPen(QtGui.QPen(QtCore.Qt.red))
+            self.borderItem.setZValue(100) # above all items
+        else:
+            self.borderItem.setPen(QtGui.QPen(QtCore.Qt.gray))
+            self.borderItem.setZValue(3) # reset to the default z value
+
+    def setMask(self, x_norm, y_norm, w_norm, h_norm):
+        # coordinates are in normalized form [0, 1]
+        width = self.rect().width()
+        height = self.rect().height()
+        x = x_norm * width
+        y = y_norm * height
+        w = w_norm * width
+        h = h_norm * height
+        self.maskItem.setRect(x, y, w, h)
 
     def updateTransientItems(self, visibleRect):
         for pid in self.cached_pixmaps:

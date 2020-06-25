@@ -386,21 +386,6 @@
     <string>Preceding Empty Page</string>
    </property>
   </action>
-  <action name="actionViewInFourColumns">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="icon">
-    <iconset resource="resources.qrc">
-     <normaloff>:/icons/view-pages-overview.svg</normaloff>:/icons/view-pages-overview.svg</iconset>
-   </property>
-   <property name="text">
-    <string>View In Four Columns</string>
-   </property>
-   <property name="toolTip">
-    <string>View In Four Columns</string>
-   </property>
-  </action>
  </widget>
  <resources>
   <include location="resources.qrc"/>
