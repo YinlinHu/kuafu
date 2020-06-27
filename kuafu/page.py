@@ -227,8 +227,8 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
 
     def getParentPatchId(self, patch_id):
         # get the parent patch id of patch_id
-        if patch_id == 1: # 1 is the root id
-            return None
+        if patch_id == 1: # 1 is the root id, return itself
+            return 1
         # get current column number
         col_num = int(math.log2(math.sqrt(patch_id)))
         col_num = int(math.pow(2, col_num))
@@ -245,7 +245,7 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
     def isChildPatch(self, child_patch_id, parent_patch_id):
         # test whether child_patch_id is a child of parent_patch_id
         pid = self.getParentPatchId(child_patch_id)
-        while pid is not None and pid >= parent_patch_id:
+        while pid > 1 and pid >= parent_patch_id:
             if pid == parent_patch_id:
                 return True
             pid = self.getParentPatchId(pid)

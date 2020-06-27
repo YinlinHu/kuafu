@@ -18,6 +18,7 @@ import numpy as np
 
 class BaseDocGraphicsView(QtWidgets.QGraphicsView):
     loadFinished = QtCore.pyqtSignal()
+    tocLoaded = QtCore.pyqtSignal(list)
     viewportChanged = QtCore.pyqtSignal(str, int, dict)
     zoomRatioChanged = QtCore.pyqtSignal(float)
     viewColumnChanged = QtCore.pyqtSignal(int)
@@ -128,6 +129,9 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
         # query page size using the first worker
         self.render_list[0].commandQ.put(['PAGESIZES', [None]])
+
+        # query Toc using the first worker
+        self.render_list[0].commandQ.put(['TOC', [None]])
 
     def onPageSizesReceived(self, pages_size_inch):
         debug("%d Page Sizes Received" % len(pages_size_inch))
@@ -293,11 +297,6 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         #     render_idx, page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
         # ))
 
-        # the doc has changed, too late
-        if filename != self.current_filename:
-            # debug("file name changed: %s -> %s. skipping" % (filename, self.current_filename))
-            return
-
         # if page_no not in self.current_visible_regions:
         #     debug("become unvisible: %d. skipping" % page_no)
         #     return
@@ -359,13 +358,19 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
             size = resultsQ.qsize()
             for i in range(size):
                 item = resultsQ.get() # will be blocked until when some data are avaliable
-                if item[0] == 'PAGESIZES_RES':
-                    _, filename, pages_size_inch = item
-                    if filename != self.current_filename: # the doc has changed, too late
-                        continue
+                message = item[0]
+                filename = item[1]
+                if filename != self.current_filename: # the doc has changed, too late
+                    continue
+                # 
+                if message == 'PAGESIZES_RES':
+                    pages_size_inch = item[2]
                     self.onPageSizesReceived(pages_size_inch)
-                elif item[0] == 'RENDER_RES':
-                    _, filename, page_no, dpi, roi, img_byte_array = item
+                if message == 'TOC_RES':
+                    toc = item[2]
+                    self.tocLoaded.emit(toc)
+                elif message == 'RENDER_RES':
+                    page_no, dpi, roi, img_byte_array = item[2:]
                     self.handleSingleRenderedImage(rd_idx, filename, page_no, dpi, roi, img_byte_array)
 
     def __rearrangePages(self):
@@ -522,16 +527,24 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         if len(self.current_visible_regions) == 0:
             return
         curent_page_idx = next(iter(self.current_visible_regions)) # first key as the current
-        self.gotoPage(curent_page_idx - 1)
+        self.gotoPage(curent_page_idx - self.view_column_count)
 
     def goNextPage(self):
         if len(self.current_visible_regions) == 0:
             return
         curent_page_idx = next(iter(self.current_visible_regions)) # first key as the current
-        self.gotoPage(curent_page_idx + 1)
+        self.gotoPage(curent_page_idx + self.view_column_count)
 
     def gotoPage(self, pg_no):
-        pass
+        # make the page as the first visible one (it can not guarantee for multi-column cases)
+        if not self.load_finished_flag:
+            return
+        visRect = self.viewport().rect() # visible area
+        visRect = self.mapToScene(visRect).boundingRect() # change to scene coordinates
+        flag, x, y, w, h = self.current_pages_rect[pg_no]
+        scene_cx = x + visRect.width() / 2
+        scene_cy = y + visRect.height() / 2
+        self.centerOn(scene_cx, scene_cy)
 
     # def showEvent(self, ev):
     #     debug('showEvent in BaseDocGraphicsView')

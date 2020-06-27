@@ -9,8 +9,10 @@ from popplerqt5 import Poppler
 
 from utils import debug
 from pdfworker import PdfReader
+from toc import TocManager
 
 import os
+import numpy as np
 
 class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     # renderRequested = QtCore.pyqtSignal(int, float)
@@ -21,15 +23,19 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     # findTextRequested = QtCore.pyqtSignal(str, int, bool)
     # pagePositionChanged = QtCore.pyqtSignal(int, int)
     # showStatusRequested = QtCore.pyqtSignal(str)
+    fileReselected = QtCore.pyqtSignal(str)
 
     def __init__(self, parent, screen_dpi):
         super(LibraryView, self).__init__(parent) # Call the inherited classes __init__ method
         self.setupUi(self)
 
         self.screen_dpi = screen_dpi
+        self.filename = ''
 
         self.splitter_doc.setSizes([1, 0]) # set relative widths of its children
         self.splitter_doc.setCollapsible(0, False) 
+
+        self.preview_graphicsview.tocLoaded.connect(self.onTocLoaded)
 
         self.preview_graphicsview.viewportChanged.connect(self.onDocViewportChanged)
         self.preview_graphicsview_2.viewportChanged.connect(self.onDocViewportChanged)
@@ -45,10 +51,10 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.fileview.clicked.connect(self.onFileClick)
 
         self.fileview.setAlternatingRowColors(True)
-        self.annotview.setAlternatingRowColors(True)
+        # self.annotview.setAlternatingRowColors(True)
 
-        self.annotview_model = QtGui.QStandardItemModel()
-        self.annotview.setModel(self.annotview_model)
+        # self.annotview_model = QtGui.QStandardItemModel()
+        # self.annotview.setModel(self.annotview_model)
         # self.annotationView.resizeRequested.connect(self.onAnnotaionViewResized)
 
         # # Create separate thread for reading pdf metainformations
@@ -67,6 +73,9 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         # dirname = self.repos[0]
         # self.setFileList(dirname)
         self.current_dir = None
+        self.tocManager = TocManager(self.tocPushButton1)
+        self.tocManager.tocIndexChanged.connect(self.onTocIndexChanged)
+        self.current_page_idx = -1
 
     def setFileList(self, dirname):
         # remove all file list first
@@ -92,15 +101,25 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.filename = filename
         self.screen_dpi = screep_dpi
         self.thumb_graphicsview.setDocument(self.filename, self.screen_dpi)
+        self.fileReselected.emit(self.filename)
 
     def onFileClick(self, m_index):
         # remove all annotatoin first
-        self.annotview_model.removeRows(0, self.annotview_model.rowCount())
+        # self.annotview_model.removeRows(0, self.annotview_model.rowCount())
 
         self.filename = self.current_dir + os.sep + self.fileview_model.data(m_index, QtCore.Qt.UserRole + 1)
         print(self.filename)
 
         self.thumb_graphicsview.setDocument(self.filename, self.screen_dpi)
+        self.fileReselected.emit(self.filename)
+                
+    def onTocLoaded(self, toc):
+        self.tocManager.setToc(toc)
+        self.tocManager.update(self.current_page_idx)
+
+    def onTocIndexChanged(self, page_no):
+        debug("onTocIndexChanged: %d" % page_no)
+        self.preview_graphicsview.gotoPage(page_no)
 
     def onDoc1LoadFinished(self):
         # debug("onDoc1LoadFinished")
@@ -115,7 +134,10 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     def onDocViewportChanged(self, filename, page_counts, visible_regions):
         # debug("Doc viewport changed: ", visible_regions)
         self.thumb_graphicsview.highlightVisibleMasks(filename, visible_regions)
-
+        # 
+        self.current_page_idx = next(iter(visible_regions)) # fetch first key
+        self.tocManager.update(self.current_page_idx)
+        
     def onPageRelocationRequest(self, page_no, x_ratio, y_ratio):
         # debug("onPageRelocationRequest: <%d> (%.2f, %.2f)" % (page_no, x_ratio, y_ratio))
         self.preview_graphicsview.centerOnPage(page_no, x_ratio, y_ratio)
@@ -169,6 +191,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
 
     def setPrecedingEmptyPage(self, emptyNum):
         self.preview_graphicsview.setPrecedingEmptyPage(emptyNum)
+        self.thumb_graphicsview.setPrecedingEmptyPage(emptyNum)
 
     def zoomIn(self):
         self.preview_graphicsview.zoomIn()

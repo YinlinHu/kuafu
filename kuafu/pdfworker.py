@@ -4,7 +4,7 @@ from PyQt5 import QtGui
 # https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
 # MuPDF is much faster at rendering, but slower at loading (get_page_sizes()) and also use more memories
 # 
-# TODO Mupdf freezed very often
+# TODO Mupdf freezes and crashes very often
 BACKEND_MuPDF = False
 
 if BACKEND_MuPDF:
@@ -147,6 +147,55 @@ class PdfRender(Process):
             self.requests_queue.pop(page_no)
         return command
         
+    def get_toc_item_poppler(self, doc, node):
+        element = node.toElement()
+        title = element.tagName()
+        # 
+        linkDestination = None
+        if element.hasAttribute("Destination"):
+            linkDestination = Poppler.LinkDestination(element.attribute("Destination"))
+        elif element.hasAttribute("DestinationName"):
+            linkDestination = doc.linkDestination(element.attribute("DestinationName"))
+
+        if linkDestination:
+            # NOTE: in some files page_num may be in range 1 -> pages_count,
+            # also, top may be not in range 0.0->1.0, we have to take care of that
+            page_num = linkDestination.pageNumber()
+            top = linkDestination.top() if linkDestination.isChangeTop() else 0
+        else:
+            page_num = -1
+            top = -1
+        return title, page_num, top
+
+    def getTableOfContents(self):
+        if BACKEND_MuPDF:
+            return self.doc.getToC(simple=False)
+        else:
+            # Poppler API
+            toc = self.doc.toc()
+            if not toc:
+                return []
+            # construct toc from QDomDocument tree
+            # each item will contain [level (the first entry is always 1), title, page (1-based), extra]
+            # consistent with MuPDF
+            toc_list = []
+            current_level = 0
+            nodes_queue = [[toc, current_level]]
+            while len(nodes_queue) > 0:
+                current_node, current_level = nodes_queue.pop(-1) # get the last one
+                # 
+                if current_level > 0:
+                    # the root toc item contains nothing, the first valid level is always 1
+                    title, page_num, _ = self.get_toc_item_poppler(self.doc, current_node)
+                    toc_list.append([current_level, title, page_num, None])
+                # 
+                # push children in queue in reverse order
+                current_node = current_node.lastChild()
+                while not current_node.isNull():
+                    nodes_queue.append([current_node, current_level + 1])
+                    current_node = current_node.previousSibling()
+            return toc_list
+
     def receive_commands(self):
         # collect all commands in queue
         size = self.commandQ.qsize()
@@ -162,6 +211,9 @@ class PdfRender(Process):
             elif command == 'PAGESIZES':
                 pages_size_inch = self.get_page_sizes()
                 self.resultsQ.put(['PAGESIZES_RES', self.filename, pages_size_inch])
+            elif command == 'TOC':
+                toc = self.getTableOfContents()
+                self.resultsQ.put(['TOC_RES', self.filename, toc])
             elif command == 'RENDER':
                 page_no, dpi, roi, visible_regions =params
                 self.save_rendering_command(page_no, dpi, roi, visible_regions)

@@ -41,6 +41,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         self.screen_dpi = screens[0].logicalDotsPerInch()
         
         self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi)
+        self.libWidget.fileReselected.connect(self.onFileReselected)
         self.libWidget.preview_graphicsview.viewportChanged.connect(self.setPageInfoOnToolbar)
         self.libWidget.preview_graphicsview.zoomRatioChanged.connect(self.onZoomRatioChanged)
         self.libWidget.preview_graphicsview.viewColumnChanged.connect(self.onViewColumnChanged)
@@ -161,9 +162,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         self.recent_files = self.settings.value("RecentFiles", [])
         self.history_filenames = self.settings.value("HistoryFileNameList", [])
         self.history_page_no = self.settings.value("HistoryPageNoList", [])
-        self.offset_x = int(self.settings.value("OffsetX", 4))
-        self.offset_y = int(self.settings.value("OffsetY", 26))
-        self.available_area = [desktop.availableGeometry().width(), desktop.availableGeometry().height()]
+        geometry = self.settings.value('Geometry', bytes('', 'utf-8'))
+        self.restoreGeometry(geometry)
+
+        # self.offset_x = int(self.settings.value("OffsetX", 4))
+        # self.offset_y = int(self.settings.value("OffsetY", 26))
+        # self.available_area = [desktop.availableGeometry().width(), desktop.availableGeometry().height()]
         # self.zoomLevelCombo.setCurrentIndex(int(self.settings.value("ZoomLevel", 2)))
 
         # Connect Signals
@@ -263,6 +267,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
 
     def onZoomRatioChanged(self, zoomRatio):
         if zoomRatio == 0:
+            self.zoomFitwidthAction.setChecked(True)
             self.showStatus("Zoom fitted to width")
         else:
             self.zoomFitwidthAction.setChecked(False)
@@ -289,11 +294,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
     def setPageInfoOnToolbar(self, filename, page_counts, visible_regions):
         if len(visible_regions) == 0:
             return
-        curent_page_idx = next(iter(visible_regions)) # fetch first key
+        current_page_idx = next(iter(visible_regions)) # fetch first key
         # 
         self.pageNoEdit.setMaxLength(len(str(page_counts)))
-        self.pageNoEdit.setText("%d" % (curent_page_idx +1))
+        self.pageNoEdit.setText("%d" % (current_page_idx +1))
         self.pageCountAction.setText("%d" % page_counts)
+
+    def onFileReselected(self, filefullpath):
+        filename = os.path.split(filefullpath)[1]
+        self.setWindowTitle(filename + ' -- kuafu')
 
     def addRecentFiles(self):
         self.recent_files_actions[:] = [] # pythonic way to clear list
@@ -408,17 +417,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
     def onTabClose(self, tabIdx):
         widget = self.centraltabwidget.widget(tabIdx)
         # save information if necessary
-        if isinstance(widget, DocumentView):
-            filename = widget.filename
-            current_page = widget.current_page
-            self.saveFileData(filename, current_page)
-            # 
-            self.settings.setValue("OffsetX", self.geometry().x()-self.x())
-            self.settings.setValue("OffsetY", self.geometry().y()-self.y())
-            # self.settings.setValue("ZoomLevel", self.zoom_level)
-            self.settings.setValue("HistoryFileNameList", self.history_filenames[:100])
-            self.settings.setValue("HistoryPageNoList", self.history_page_no[:100])
-            self.settings.setValue("RecentFiles", self.recent_files[:10]) 
+        # if isinstance(widget, DocumentView):
         # remove
         widget.close()
         self.centraltabwidget.removeTab(tabIdx)
@@ -429,6 +428,24 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         tabCnt = self.centraltabwidget.count()
         for i in range(tabCnt):
             self.centraltabwidget.widget(i).close()
+
+        # filename = widget.filename
+        # current_page = widget.current_page
+        if len(self.libWidget.filename) > 0:
+            self.saveFileData(self.libWidget.filename, 0)
+        # 
+        geometry = self.saveGeometry()
+        self.settings.setValue('Geometry', geometry)
+
+        # self.settings.setValue("OffsetX", self.geometry().x()-self.x())
+        # self.settings.setValue("OffsetY", self.geometry().y()-self.y())
+        # self.settings.setValue("ZoomLevel", self.zoom_level)
+        if len(self.history_filenames) > 0:
+            self.settings.setValue("HistoryFileNameList", self.history_filenames[:100])
+        if len(self.history_page_no) > 0:
+            self.settings.setValue("HistoryPageNoList", self.history_page_no[:100])
+        if len(self.recent_files) > 0:
+            self.settings.setValue("RecentFiles", self.recent_files[:10]) 
 
 def wait(millisec):
     loop = QtCore.QEventLoop()

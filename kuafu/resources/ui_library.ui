@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>970</width>
+    <width>1101</width>
     <height>701</height>
    </rect>
   </property>
@@ -27,93 +27,45 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QSplitter" name="splitter">
-     <property name="minimumSize">
-      <size>
-       <width>0</width>
-       <height>0</height>
-      </size>
-     </property>
+    <widget class="QSplitter" name="splitter_main">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
      </property>
-     <property name="childrenCollapsible">
-      <bool>false</bool>
-     </property>
-     <widget class="QTabWidget" name="tabWidget_2">
-      <property name="minimumSize">
-       <size>
-        <width>200</width>
-        <height>0</height>
-       </size>
-      </property>
+     <widget class="QTreeView" name="fileview">
       <property name="maximumSize">
        <size>
-        <width>600</width>
+        <width>16777215</width>
         <height>16777215</height>
        </size>
       </property>
-      <property name="currentIndex">
-       <number>0</number>
-      </property>
-      <widget class="QWidget" name="tab_3">
-       <attribute name="title">
-        <string>Tab 1</string>
-       </attribute>
-       <layout class="QHBoxLayout" name="horizontal_Layout">
-        <property name="leftMargin">
-         <number>0</number>
-        </property>
-        <property name="topMargin">
-         <number>0</number>
-        </property>
-        <property name="rightMargin">
-         <number>0</number>
-        </property>
-        <property name="bottomMargin">
-         <number>0</number>
-        </property>
-        <item>
-         <widget class="QSplitter" name="splitter_1">
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <widget class="QTreeView" name="fileview">
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>16777215</height>
-            </size>
-           </property>
-          </widget>
-          <widget class="QTreeView" name="annotview"/>
-         </widget>
-        </item>
-       </layout>
-      </widget>
-      <widget class="QWidget" name="tab_4">
-       <attribute name="title">
-        <string>Tab 2</string>
-       </attribute>
-      </widget>
      </widget>
      <widget class="QSplitter" name="splitter_doc">
-      <property name="minimumSize">
-       <size>
-        <width>600</width>
-        <height>0</height>
-       </size>
-      </property>
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="DocGraphicsView" name="preview_graphicsview"/>
+      <widget class="QWidget" name="layoutWidget">
+       <layout class="QVBoxLayout" name="verticalLayout">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <item>
+         <widget class="TocPushButton" name="tocPushButton1">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string> ᐅ </string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="DocGraphicsView" name="preview_graphicsview"/>
+        </item>
+       </layout>
+      </widget>
       <widget class="DocGraphicsView" name="preview_graphicsview_2"/>
      </widget>
      <widget class="ThumbGraphicsView" name="thumb_graphicsview">
@@ -144,6 +96,11 @@
    <class>ThumbGraphicsView</class>
    <extends>QGraphicsView</extends>
    <header>thumbgraphicsview.h</header>
+  </customwidget>
+  <customwidget>
+   <class>TocPushButton</class>
+   <extends>QPushButton</extends>
+   <header>tocpushbutton.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
