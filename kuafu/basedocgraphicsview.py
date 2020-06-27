@@ -160,9 +160,8 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.setColumnNumber(min(self.view_column_count, self.page_counts))
         self.setPrecedingEmptyPage(0)
         # 
-        self.onViewportChanged()
-        # 
         self.load_finished_flag = True
+        self.onViewportChanged()
         self.loadFinished.emit()
 
     def onViewportChanged(self):
@@ -217,6 +216,9 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
                 self.current_pages_size_pix.append([int(width), int(height)])
 
     def getVisibleRegions(self):
+        if not self.load_finished_flag:
+            return {}
+
         visRect = self.viewport().rect() # visible area
         visRect = self.mapToScene(visRect).boundingRect() # change to scene coordinates
         # 

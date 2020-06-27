@@ -31,7 +31,7 @@ class TocManager(QtCore.QObject):
         self.model.removeRows(0, self.model.rowCount())
 
         # clear title
-        self.tocButton.setText(" ᐅ ")
+        self.tocButton.setText(" ⯈ ")
 
         self.toc = toc
         self.toc_item_parents = None
@@ -132,7 +132,7 @@ class TocManager(QtCore.QObject):
         # 
         title_str = ""
         for i in reversed(range(len(title_list))):
-            title_str += " ᐅ "
+            title_str += " ⯈ "
             title_str += title_list[i]
 
         self.tocButton.setText(title_str)

@@ -162,8 +162,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         self.recent_files = self.settings.value("RecentFiles", [])
         self.history_filenames = self.settings.value("HistoryFileNameList", [])
         self.history_page_no = self.settings.value("HistoryPageNoList", [])
-        geometry = self.settings.value('Geometry', bytes('', 'utf-8'))
+        geometry = self.settings.value('geometry', bytes('', 'utf-8'))
         self.restoreGeometry(geometry)
+        
+        state = self.settings.value('library/spliter_main', bytes('', 'utf-8'))
+        self.libWidget.splitter_main.restoreState(state)
+        state = self.settings.value('library/spliter_doc', bytes('', 'utf-8'))
+        self.libWidget.splitter_doc.restoreState(state)
 
         # self.offset_x = int(self.settings.value("OffsetX", 4))
         # self.offset_y = int(self.settings.value("OffsetY", 26))
@@ -435,7 +440,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
             self.saveFileData(self.libWidget.filename, 0)
         # 
         geometry = self.saveGeometry()
-        self.settings.setValue('Geometry', geometry)
+        self.settings.setValue('geometry', geometry)
+
+        state = self.libWidget.splitter_main.saveState()
+        self.settings.setValue('library/spliter_main', state)
+        state = self.libWidget.splitter_doc.saveState()
+        self.settings.setValue('library/spliter_doc', state)
 
         # self.settings.setValue("OffsetX", self.geometry().x()-self.x())
         # self.settings.setValue("OffsetY", self.geometry().y()-self.y())
