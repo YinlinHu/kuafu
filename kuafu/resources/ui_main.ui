@@ -82,11 +82,8 @@
    </widget>
    <widget class="QMenu" name="menuNavigate">
     <property name="title">
-     <string>Navigate</string>
+     <string>Help</string>
     </property>
-    <addaction name="undoJumpAction"/>
-    <addaction name="prevPageAction"/>
-    <addaction name="nextPageAction"/>
    </widget>
    <widget class="QMenu" name="menuView">
     <property name="title">
@@ -98,23 +95,6 @@
    <addaction name="menuFile"/>
    <addaction name="menuView"/>
    <addaction name="menuNavigate"/>
-  </widget>
-  <widget class="QToolBar" name="toolBar">
-   <property name="windowTitle">
-    <string>toolBar</string>
-   </property>
-   <property name="allowedAreas">
-    <set>Qt::BottomToolBarArea|Qt::TopToolBarArea</set>
-   </property>
-   <property name="floatable">
-    <bool>false</bool>
-   </property>
-   <attribute name="toolBarArea">
-    <enum>TopToolBarArea</enum>
-   </attribute>
-   <attribute name="toolBarBreak">
-    <bool>false</bool>
-   </attribute>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
   <action name="openFileAction">

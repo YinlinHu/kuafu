@@ -31,7 +31,7 @@ class TocManager(QtCore.QObject):
         self.model.removeRows(0, self.model.rowCount())
 
         # clear title
-        self.tocButton.setText(" ⯈ ")
+        self.tocButton.clearTitleText()
 
         self.toc = toc
         self.toc_item_parents = None
@@ -117,22 +117,19 @@ class TocManager(QtCore.QObject):
             
         # 
         scrollTargetModelIndex = self.model.indexFromItem(self.toc_model_items[current_toc_idx])
-        self.view.expand(scrollTargetModelIndex)
-        self.view.scrollTo(scrollTargetModelIndex, QtWidgets.QAbstractItemView.ScrollHint.PositionAtCenter)
-        self.view.clearSelection()
-        self.view.selectionModel().setCurrentIndex(scrollTargetModelIndex, QtCore.QItemSelectionModel.Select)
 
         # 
         title_list = []
+        valid_tocs = []
         while current_toc_idx >= 0:
             lvl, title, page, extra = self.toc[current_toc_idx]
             title_list.append(title)
-            # 
+            valid_tocs.append(current_toc_idx)
             current_toc_idx = self.toc_item_parents[current_toc_idx]
-        # 
-        title_str = ""
-        for i in reversed(range(len(title_list))):
-            title_str += " ⯈ "
-            title_str += title_list[i]
+        title_list.reverse()
+        self.tocButton.setTitleText(title_list)
 
-        self.tocButton.setText(title_str)
+        self.view.clearSelection()
+        self.view.expand(scrollTargetModelIndex)
+        self.view.scrollTo(scrollTargetModelIndex, QtWidgets.QAbstractItemView.ScrollHint.PositionAtCenter)
+        self.view.selectionModel().setCurrentIndex(scrollTargetModelIndex, QtCore.QItemSelectionModel.Select)

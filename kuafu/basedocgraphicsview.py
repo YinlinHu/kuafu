@@ -24,7 +24,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
     viewColumnChanged = QtCore.pyqtSignal(int)
     emptyLeadingPageChanged = QtCore.pyqtSignal(int)
 
-    def __init__(self, parent, render_num=4):
+    def __init__(self, parent, render_num=1):
         super(BaseDocGraphicsView, self).__init__(parent)
 
         # self.setViewport(QtOpenGL.QGLWidget()) # opengl
@@ -158,7 +158,8 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         # debug('C', time_c - time_b)
 
         self.setColumnNumber(min(self.view_column_count, self.page_counts))
-        self.setPrecedingEmptyPage(0)
+        self.leading_empty_pages = 0
+        self.emptyLeadingPageChanged.emit(self.leading_empty_pages)
         # 
         self.load_finished_flag = True
         self.onViewportChanged()
@@ -492,13 +493,16 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
     def setColumnNumber(self, colNum):
         if self.page_counts > 0:
             self.view_column_count = min(self.page_counts, colNum)
+            if self.view_column_count == 1:
+                self.leading_empty_pages = 0
+                self.emptyLeadingPageChanged.emit(0)
             self.redrawPages()
             self.viewColumnChanged.emit(self.view_column_count)
 
-    def setPrecedingEmptyPage(self, emptyPages):
+    def setPrecedingEmptyPage(self, emptyPage):
         if self.page_counts > 0:
-            if self.view_column_count > 1:
-                self.leading_empty_pages = emptyPages
+            if self.view_column_count > 1 and emptyPage == 1:
+                self.leading_empty_pages = 1
             else:
                 self.leading_empty_pages = 0
             self.redrawPages()

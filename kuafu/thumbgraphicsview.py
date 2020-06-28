@@ -13,6 +13,9 @@ class ThumbGraphicsView(BaseDocGraphicsView):
 
         self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.white)) # set background
 
+        self.setDragMode(QtWidgets.QGraphicsView.NoDrag) # disable the default dragger
+
+        self.isMousePressed = False
         self.isMouseOver = False
 
     def highlightVisibleMasks(self, filename, visible_regions):
@@ -39,7 +42,8 @@ class ThumbGraphicsView(BaseDocGraphicsView):
                 self.pageMarkedAsCurrent = pg_no
             self.page_items[pg_no].setMask(vRect[0], vRect[1], vRect[2], vRect[3])
             if not self.isMouseOver:
-                self.centerOn(self.page_items[pg_no])
+                # self.centerOn(self.page_items[pg_no])
+                self.ensureVisible(self.page_items[pg_no])
             # 
             self.current_highlighted_pages.append(pg_no)
 
@@ -47,9 +51,28 @@ class ThumbGraphicsView(BaseDocGraphicsView):
         # debug('mousePressEvent in ThumbGraphicsView')
         if not self.load_finished_flag:
             return
+        self.isMousePressed = True
+        self.setCursor(QtCore.Qt.ClosedHandCursor)
         page_no, x_ratio, y_ratio = self.getPageByPos(ev.pos().x(), ev.pos().y())
         self.pageRelocationRequest.emit(page_no, x_ratio, y_ratio)
         return super().mousePressEvent(ev)
+
+    def mouseReleaseEvent(self, ev):
+        # debug('mouseReleaseEvent in ThumbGraphicsView')
+        if not self.load_finished_flag:
+            return
+        self.isMousePressed = False
+        self.setCursor(QtCore.Qt.ArrowCursor)
+        return super().mouseReleaseEvent(ev)
+
+    def mouseMoveEvent(self, ev):
+        # debug('mouseMoveEvent in ThumbGraphicsView')
+        if not self.load_finished_flag:
+            return
+        if self.isMousePressed:
+            page_no, x_ratio, y_ratio = self.getPageByPos(ev.pos().x(), ev.pos().y())
+            self.pageRelocationRequest.emit(page_no, x_ratio, y_ratio)
+        return super().mouseMoveEvent(ev)
 
     def enterEvent(self, ev):
         # debug('enterEvent in ThumbGraphicsView')

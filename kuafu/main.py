@@ -25,8 +25,6 @@ from resources.ui_main import Ui_window
 from document import DocumentView
 from library import LibraryView
 
-from lineedit import PageNoLineEdit, FindLineEdit
-
 from dialogs import ExportToImageDialog, DocInfoDialog
 
 from docgraphicsview import DocGraphicsView
@@ -42,10 +40,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         
         self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi)
         self.libWidget.fileReselected.connect(self.onFileReselected)
-        self.libWidget.preview_graphicsview.viewportChanged.connect(self.setPageInfoOnToolbar)
-        self.libWidget.preview_graphicsview.zoomRatioChanged.connect(self.onZoomRatioChanged)
-        self.libWidget.preview_graphicsview.viewColumnChanged.connect(self.onViewColumnChanged)
-        self.libWidget.preview_graphicsview.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
+        self.libWidget.showStatusRequested.connect(self.onShowStatusRequested)
         self.centraltabwidget.addTab(self.libWidget, "My Library")
         
         self.centraltabwidget.setTabsClosable(True)
@@ -56,6 +51,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
 
         self.centraltabwidget.currentChanged.connect(self.onTabChanged)
         self.centraltabwidget.tabCloseRequested.connect(self.onTabClose)
+
         self.centraltabwidget.setStyleSheet("QTabWidget::pane {margin: 0 0 0 0}")
 
         # self.dockSearch.hide()
@@ -79,76 +75,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
 
         # connect menu actions signals
         self.openFileAction.triggered.connect(self.openFile)
-        # self.printAction.triggered.connect(self.printFile)
-        # self.quitAction.triggered.connect(self.close)
-        # self.toPSAction.triggered.connect(self.exportToPS)
+        self.libWidget.pushButton_open.clicked.connect(self.openFile)
+        
         # self.pageToImageAction.triggered.connect(self.exportPageToImage)
         # self.docInfoAction.triggered.connect(self.docInfo)
-        self.zoominAction.triggered.connect(self.zoomIn)
-        self.zoomoutAction.triggered.connect(self.zoomOut)
-        self.zoomFitwidthAction.triggered.connect(self.zoomFitWidth)
-        
-        self.zoomFitwidthAction.setChecked(True)
-
-        self.actionViewInOneColumn.triggered.connect(self.onViewInOneColumn)
-        self.actionViewInTwoColumns.triggered.connect(self.onViewInTwoColumns)
-        self.actionPrecedingEmptyPage.triggered.connect(self.onPrecedingEmptyPage)
-
-        # default is one column
-        self.actionViewInOneColumn.setChecked(True)
-
-        # self.undoJumpAction.triggered.connect(self.undoJump)
-        self.prevPageAction.triggered.connect(self.goPrevPage)
-        self.nextPageAction.triggered.connect(self.goNextPage)
-        self.actionFind.triggered.connect(self.onActionFind)
-        # self.lastPageAction.triggered.connect(self.goLastPage)
-
-        self.pageNoEdit = PageNoLineEdit(self)
-        self.pageNoEdit.returnPressed.connect(self.gotoPage)
-
-        self.findTxtEdit = FindLineEdit(self)
-
-        self.pageNoLabel = QtWidgets.QLabel(self)
-        self.pageNoLabel.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.pageNoLabel.setText('of')
-
-        # self.viewColumnNumberCombo = QtWidgets.QComboBox(self)
-        # self.viewColumnNumberCombo.activated.connect(self.setViewColumnNumber)
-        # self.viewColumnNumberCombo.addItems(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"])
-        # self.zoom_levels = [0, 75, 90, 100, 110 , 121, 133, 146, 175, 200, 400, 800, 1600]
-
-        # Add toolbar actions
-        self.toolBar.addAction(self.undoJumpAction)
-        self.toolBar.addAction(self.redoJumpAction)
-        self.toolBar.addSeparator()
-        self.toolBar.addAction(self.openFileAction)
-        self.toolBar.addAction(self.printAction)
-        # self.toolBar.addAction(self.docInfoAction)
-        self.toolBar.addSeparator()
-        self.toolBar.addAction(self.zoomoutAction)
-        self.toolBar.addAction(self.zoominAction)
-        self.toolBar.addAction(self.zoomFitwidthAction)
-        self.toolBar.addSeparator()
-        self.toolBar.addAction(self.actionViewInOneColumn)
-        self.toolBar.addAction(self.actionViewInTwoColumns)
-        self.toolBar.addAction(self.actionPrecedingEmptyPage)
-        self.toolBar.addSeparator()
-        # self.toolBar.addAction(self.firstPageAction)
-        self.toolBar.addAction(self.prevPageAction)
-        self.toolBar.addWidget(self.pageNoEdit)
-        self.toolBar.addWidget(self.pageNoLabel)
-        self.toolBar.addAction(self.pageCountAction)
-        self.toolBar.addAction(self.nextPageAction)
-        # self.toolBar.addAction(self.lastPageAction)
-        self.toolBar.addSeparator()
-        self.toolBar.addAction(self.actionFind)
-        self.toolBar.addWidget(self.findTxtEdit)
-        # self.toolBar.addAction(self.redoModificationAction)
-        spacer = QtWidgets.QWidget(self)
-        spacer.setSizePolicy(1|2|4,1|4)
-        self.toolBar.addWidget(spacer)
-        self.toolBar.addSeparator()
-        # self.toolBar.addAction(self.quitAction)
+        # self.toPSAction.triggered.connect(self.exportToPS)
+        # self.printAction.triggered.connect(self.printFile)
 
         # # Add widgets
         # self.statusbar = QLabel(self)
@@ -165,10 +97,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         geometry = self.settings.value('geometry', bytes('', 'utf-8'))
         self.restoreGeometry(geometry)
         
-        state = self.settings.value('library/spliter_main', bytes('', 'utf-8'))
-        self.libWidget.splitter_main.restoreState(state)
-        state = self.settings.value('library/spliter_doc', bytes('', 'utf-8'))
-        self.libWidget.splitter_doc.restoreState(state)
+        state = self.settings.value('library/spliter', bytes('', 'utf-8'))
+        self.libWidget.splitter.restoreState(state)
+        # state = self.settings.value('library/spliter_doc', bytes('', 'utf-8'))
+        # self.libWidget.splitter_doc.restoreState(state)
 
         # self.offset_x = int(self.settings.value("OffsetX", 4))
         # self.offset_y = int(self.settings.value("OffsetY", 26))
@@ -185,12 +117,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         self.recent_files_actions = []
         self.addRecentFiles()
 
-        # Show Window
-        width = int(self.settings.value("WindowWidth", 1040))
-        height = int(self.settings.value("WindowHeight", 717))
-
-        self.resize(width, height)
         self.show()
+
+    def onShowStatusRequested(self, msg):
+        self.showStatus(msg)
 
     def showStatus(self, msg):
         self.statusBar.showMessage(msg, msecs=5000)
@@ -204,106 +134,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
 
     def onActionFind(self):
         self.findTxtEdit.setFocus()
-
-    def onViewInOneColumn(self):
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        widget.setColumnNumber(1)
-
-    def onViewInTwoColumns(self):
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        widget.setColumnNumber(2)
-
-    def onPrecedingEmptyPage(self):
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        if self.actionPrecedingEmptyPage.isChecked():
-            widget.setPrecedingEmptyPage(1)
-        else:
-            widget.setPrecedingEmptyPage(0)
-
-    def zoomIn(self):
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        self.zoomFitwidthAction.setChecked(False)
-        widget.zoomIn()
-
-    def zoomOut(self):
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        self.zoomFitwidthAction.setChecked(False)
-        widget.zoomOut()
-
-    def zoomFitWidth(self):
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        self.zoomFitwidthAction.setChecked(True)
-        widget.zoomFitWidth()
-
-    def goPrevPage(self):
-        debug("goPrevPage in MainWindow")
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        widget.goPrevPage()
-
-    def goNextPage(self):
-        debug("goNextPage in MainWindow")
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        widget.goNextPage()
-
-    def gotoPage(self):
-        debug("gotoPage in MainWindow")
-        page_no = int(self.pageNoEdit.text())
-        cIdx = self.centraltabwidget.currentIndex()
-        widget = self.centraltabwidget.widget(cIdx)
-        # if isinstance(widget, DocumentView):
-        widget.gotoPage(page_no - 1)
-        self.pageNoEdit.clearFocus()
-
-    def onZoomRatioChanged(self, zoomRatio):
-        if zoomRatio == 0:
-            self.zoomFitwidthAction.setChecked(True)
-            self.showStatus("Zoom fitted to width")
-        else:
-            self.zoomFitwidthAction.setChecked(False)
-            self.showStatus("Zoom to %d%%" % int(zoomRatio * 100))
-    
-    def onViewColumnChanged(self, viewColumn):
-        if viewColumn == 1:
-            self.actionViewInOneColumn.setChecked(True)
-            self.actionViewInTwoColumns.setChecked(False)
-        elif viewColumn == 2:
-            self.actionViewInOneColumn.setChecked(False)
-            self.actionViewInTwoColumns.setChecked(True)
-        else:
-            assert(0)
-
-    def onEmptyLeadingPageChanged(self, emptyPages):
-        if emptyPages == 0:
-            self.actionPrecedingEmptyPage.setChecked(False)
-        elif emptyPages == 1:
-            self.actionPrecedingEmptyPage.setChecked(True)
-        else:
-            assert(0)
-
-    def setPageInfoOnToolbar(self, filename, page_counts, visible_regions):
-        if len(visible_regions) == 0:
-            return
-        current_page_idx = next(iter(visible_regions)) # fetch first key
-        # 
-        self.pageNoEdit.setMaxLength(len(str(page_counts)))
-        self.pageNoEdit.setText("%d" % (current_page_idx +1))
-        self.pageCountAction.setText("%d" % page_counts)
 
     def onFileReselected(self, filefullpath):
         filename = os.path.split(filefullpath)[1]
@@ -403,8 +233,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         if isinstance(widget, DocumentView):
             currentPage = widget.current_page
             currentPageCount = widget.pages_count
-            self.setPageInfoOnToolbar(currentPage, currentPageCount)
-            widget.pagePositionChanged.connect(self.setPageInfoOnToolbar)
 
     def saveFileData(self, filename, current_page):
         if filename != '':
@@ -442,10 +270,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         geometry = self.saveGeometry()
         self.settings.setValue('geometry', geometry)
 
-        state = self.libWidget.splitter_main.saveState()
-        self.settings.setValue('library/spliter_main', state)
-        state = self.libWidget.splitter_doc.saveState()
-        self.settings.setValue('library/spliter_doc', state)
+        state = self.libWidget.splitter.saveState()
+        self.settings.setValue('library/spliter', state)
+        # state = self.libWidget.splitter_doc.saveState()
+        # self.settings.setValue('library/spliter_doc', state)
 
         # self.settings.setValue("OffsetX", self.geometry().x()-self.x())
         # self.settings.setValue("OffsetY", self.geometry().y()-self.y())

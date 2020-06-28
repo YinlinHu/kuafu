@@ -23,10 +23,10 @@ class viewEventFilter(QtCore.QObject):
 class TocPushButton(QtWidgets.QPushButton):
     def __init__(self, parent):
         super(TocPushButton, self).__init__(parent)
-        self.setFlat(True)
-        self.setStyleSheet("Text-align:left")
+        self.parent = parent
         self.clicked.connect(self.onClicked)
         self.view = None
+        self.title_list = []
 
     def setView(self, view):
         self.view = view
@@ -34,8 +34,10 @@ class TocPushButton(QtWidgets.QPushButton):
         self.view.installEventFilter(self.view_event_filter)
 
     def resizeEvent(self, ev):
+        self.updateTitleText()
+        # 
         rect = self.geometry()
-        self.view.setGeometry(QtCore.QRect(0, rect.height(), rect.width(), 400))
+        self.view.setGeometry(QtCore.QRect(0, rect.height(), self.parent.width(), 400))
         super(TocPushButton, self).resizeEvent(ev)
 
     def onClicked(self):
@@ -46,3 +48,39 @@ class TocPushButton(QtWidgets.QPushButton):
             else:
                 self.view.show()
                 self.view.setFocus()
+
+    def constructTitleText(self, title_list, cutLength=10000):
+        title_str = ""
+        for title in title_list:
+            title_str += " ⯈ "
+            tmpStr = title[:cutLength]
+            if len(title) > cutLength:
+                tmpStr += " ..."
+            title_str += tmpStr
+        title_str += " "
+        return title_str
+
+    def updateTitleText(self):
+        if len(self.title_list) == 0:
+            return
+        # https://stackoverflow.com/questions/8633433/qt-how-to-get-the-pixel-length-of-a-string-in-a-qlabel
+        titleStr = self.constructTitleText(self.title_list)
+        textWidth = self.fontMetrics().boundingRect(titleStr).width()
+        if textWidth > self.width() - 10:
+            titleStr = self.constructTitleText(self.title_list, cutLength=12)
+        # 
+        textWidth = self.fontMetrics().boundingRect(titleStr).width()
+        if textWidth > self.width() - 10:
+            self.setStyleSheet("text-align:right")
+        else:
+            self.setStyleSheet("text-align:left")
+        self.setText(titleStr)
+
+    def setTitleText(self, title_list):
+        self.title_list = title_list
+        self.updateTitleText()
+
+    def clearTitleText(self):
+        self.title_list = []
+        self.setText(" ⯈ ")
+        self.setStyleSheet("text-align:left")

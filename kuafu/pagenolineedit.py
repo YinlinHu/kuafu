@@ -12,8 +12,7 @@ class PageNoLineEdit(QtWidgets.QLineEdit):
         self.parent = parent
 
         self.setAlignment(QtCore.Qt.AlignCenter)
-        self.setFixedWidth(50)
-        self.setMaxLength(4)
+        self.setMaxLength(5)
 
         validator = QtGui.QIntValidator(1, 9999, self)
         self.setValidator(validator)
