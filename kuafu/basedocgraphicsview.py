@@ -24,7 +24,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
     viewColumnChanged = QtCore.pyqtSignal(int)
     emptyLeadingPageChanged = QtCore.pyqtSignal(int)
 
-    def __init__(self, parent, render_num=1):
+    def __init__(self, parent, render_num):
         super(BaseDocGraphicsView, self).__init__(parent)
 
         # self.setViewport(QtOpenGL.QGLWidget()) # opengl
@@ -33,12 +33,16 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
         self.current_cursor_x = 0
         self.current_cursor_y = 0
+        self.isMousePressed = False
+        self.isMouseOver = False
 
         self.setScene(self.scene)
 
         self.page_items = [] # instances of PageGraphicsItem
         self.load_finished_flag = False
 
+        self.relocationInitInfo = None
+        
         self.current_filename = None
 
         self.page_counts = 0
@@ -104,7 +108,21 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.queue_timer.timeout.connect(self.retrieveQueueResults)
         self.queue_timer.start(20)
 
-    def clear(self):
+    def getViewStatus(self):
+        if not self.load_finished_flag:
+            return None
+        relocationInfo = self.getPageByPos(0, 0)
+        viewStatus = {
+            "viewColumnCount": self.view_column_count,
+            "leadingEmptyPage": self.leading_empty_pages,
+            "zoomIndex": self.current_zoom_index,
+            "zoomFitWidth": self.fitwidth_flag,
+            "location": relocationInfo,
+        }
+        return viewStatus
+
+    def setDocument(self, filename, screen_dpi, viewStatus=None):
+        # clear information
         self.scene.clear()
         self.page_items = []
         self.pages_size_inch = [] # (width, height) in inch, invarient
@@ -116,10 +134,20 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.rendered_info = {}
         self.current_highlighted_pages = []
         self.load_finished_flag = False
+        self.leading_empty_pages = 0
+        self.fitwidth_flag = True
+        # 
+        # unpack view state information
+        if viewStatus:
+            self.view_column_count = viewStatus['viewColumnCount']
+            self.leading_empty_pages = viewStatus['leadingEmptyPage']
+            self.current_zoom_index = viewStatus['zoomIndex']
+            self.fitwidth_flag = viewStatus['zoomFitWidth']
+            self.relocationInitInfo = viewStatus['location']
+        else:
+            self.relocationInitInfo = None
 
-    def setDocument(self, filename, screen_dpi):
-        self.clear()
-
+        #
         self.current_filename = filename
         self.screen_dpi = screen_dpi
 
@@ -145,24 +173,17 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
             self.scene.addItem(pageItem)
             self.page_items.append(pageItem)
 
-        self.fitwidth_flag = True
-        # time_a = time.time()
-        # debug('A', time_a - time_0)
-
-        self.computePagesDPI()
-        # time_b = time.time()
-        # debug('B', time_b - time_a)
-
-        self.__rearrangePages()
-        # time_c = time.time()
-        # debug('C', time_c - time_b)
-
         self.setColumnNumber(min(self.view_column_count, self.page_counts))
-        self.leading_empty_pages = 0
-        self.emptyLeadingPageChanged.emit(self.leading_empty_pages)
-        # 
         self.load_finished_flag = True
-        self.onViewportChanged()
+        # 
+        self.redrawPages(self.relocationInitInfo)
+        # 
+        self.viewColumnChanged.emit(self.view_column_count)
+        self.emptyLeadingPageChanged.emit(self.leading_empty_pages)
+        if self.fitwidth_flag:
+            self.zoomRatioChanged.emit(0)
+        else:
+            self.zoomRatioChanged.emit(self.zoom_levels[self.current_zoom_index])
         self.loadFinished.emit()
 
     def onViewportChanged(self):
@@ -206,7 +227,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
             avg_zLevel /= self.page_counts
             candi_zLevels = np.array(self.zoom_levels)
             diff = np.abs(candi_zLevels - avg_zLevel)
-            self.current_zoom_index = np.argmin(diff)
+            self.current_zoom_index = int(np.argmin(diff))
         else:
             zLevel = self.zoom_levels[self.current_zoom_index]
             dpi = self.screen_dpi * zLevel # every page will have the same dpi
@@ -431,47 +452,57 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         # that means, everything should be re-rendered
         self.rendered_info = {}
 
-    def centerOnPage(self, page_no, x_ratio, y_ratio):
-        _, x, y, w, h = self.current_pages_rect[page_no]
-        cx = x + x_ratio * w
-        cy = y + y_ratio * h
-        self.centerOn(cx, cy)
+    def viewAtPageAnchor(self, relocationInfo):
+        page_no, x_ratio, y_ratio, x_view, y_view = relocationInfo
+        # 
+        viewRect = self.viewport()
+        dx_center = viewRect.width() / 2 - x_view
+        dy_center = viewRect.height() / 2 - y_view
+        # 
+        _, new_x, new_y, new_w, new_h = self.current_pages_rect[page_no]
+        scene_cx = new_x + x_ratio * new_w + dx_center
+        scene_cy = new_y + y_ratio * new_h + dy_center
+        self.centerOn(scene_cx, scene_cy)
 
     def getPageByPos(self, view_x, view_y):
+        # 
+        # find the associated page first
+        scene_pos = self.mapToScene(view_x, view_y)
         item = self.itemAt(view_x, view_y)
         if item:
             item = item.parentItem() if item.parentItem() else item
             assert(isinstance(item, PageGraphicsItem))
-            page_no_cursor_at = self.page_items.index(item)
+            page_no = self.page_items.index(item)
         else:
             # at empty places, find the nearest page
-            scene_pos = self.mapToScene(view_x, view_y)
             page_rects = np.array(self.current_pages_rect)[:, 1:]
             pages_cx = page_rects[:, 0] + page_rects[:, 2] / 2
             pages_cy = page_rects[:, 1] + page_rects[:, 3] / 2
             distance = np.abs(pages_cx - scene_pos.x()) + np.abs(pages_cy - scene_pos.y()) # L1 distance is enough
-            page_no_cursor_at = np.argmin(distance)
+            page_no = int(np.argmin(distance))
         # 
-        _, x, y, w, h = self.current_pages_rect[page_no_cursor_at]
-        cursor_in_scene = self.mapToScene(self.current_cursor_x, self.current_cursor_y)
-        x_ratio = (cursor_in_scene.x() - x) / w # the relative position
-        y_ratio = (cursor_in_scene.y() - y) / h
+        # compute relative position
+        _, x, y, w, h = self.current_pages_rect[page_no]
+        x_ratio = (scene_pos.x() - x) / w
+        y_ratio = (scene_pos.y() - y) / h
 
-        return page_no_cursor_at, x_ratio, y_ratio
+        return page_no, x_ratio, y_ratio, view_x, view_y
 
-    def redrawPages(self):
-        if self.page_counts == 0 or len(self.current_pages_rect) == 0:
+    def redrawPages(self, relocationInfo=None):
+        if self.page_counts == 0:
             return
 
         # time_0 = time.time()
 
         # save previous cursor position
-        page_no_cursor_at, x_ratio, y_ratio = self.getPageByPos(
-            self.current_cursor_x, self.current_cursor_y
-            )
-        viewRect = self.viewport()
-        dx_center = viewRect.width() / 2 - self.current_cursor_x
-        dy_center = viewRect.height() / 2 - self.current_cursor_y
+        if not relocationInfo:
+            if len(self.current_pages_rect) > 0:
+                if not self.isMouseOver:
+                    self.current_cursor_x = 0
+                    self.current_cursor_y = 0
+                relocationInfo = self.getPageByPos(self.current_cursor_x, self.current_cursor_y)
+            else:
+                relocationInfo = [0,0,0,0,0]
 
         # compute DPI
         self.computePagesDPI()
@@ -483,10 +514,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         # debug("B ", time_b - time_a)
 
         # set viewport after rearranging (make page position under cursor unchanged)
-        _, new_x, new_y, new_w, new_h = self.current_pages_rect[page_no_cursor_at]
-        scene_cx = new_x + x_ratio * new_w + dx_center
-        scene_cy = new_y + y_ratio * new_h + dy_center
-        self.centerOn(scene_cx, scene_cy)
+        self.viewAtPageAnchor(relocationInfo)
 
         self.onViewportChanged()
 
@@ -508,20 +536,20 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
             self.redrawPages()
             self.emptyLeadingPageChanged.emit(self.leading_empty_pages)
 
-    def zoomIn(self):
+    def zoomIn(self, relocationInfo=None):
         if self.current_zoom_index == len(self.zoom_levels) - 1:
             return
         self.current_zoom_index += 1
         self.fitwidth_flag = False
-        self.redrawPages()
+        self.redrawPages(relocationInfo)
         self.zoomRatioChanged.emit(self.zoom_levels[self.current_zoom_index])
 
-    def zoomOut(self):
+    def zoomOut(self, relocationInfo=None):
         if self.current_zoom_index == 0:
             return
         self.current_zoom_index -= 1
         self.fitwidth_flag = False
-        self.redrawPages()
+        self.redrawPages(relocationInfo)
         self.zoomRatioChanged.emit(self.zoom_levels[self.current_zoom_index])
 
     def zoomFitWidth(self):
@@ -591,10 +619,12 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
     def mousePressEvent(self, ev):
         # debug('mousePressEvent in BaseDocGraphicsView')
+        self.isMousePressed = True
         return super().mousePressEvent(ev)
 
     def mouseReleaseEvent(self, ev):
         # debug('mouseReleaseEvent in BaseDocGraphicsView')
+        self.isMousePressed = False
         return super().mouseReleaseEvent(ev)
 
     def mouseMoveEvent(self, ev):
@@ -603,3 +633,13 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.current_cursor_y = ev.y()
         # debug(self.current_cursor_x, self.current_cursor_y)
         return super().mouseMoveEvent(ev)
+
+    def enterEvent(self, ev):
+        # debug('enterEvent in BaseDocGraphicsView')
+        self.isMouseOver = True
+        return super().enterEvent(ev)
+    
+    def leaveEvent(self, ev):
+        # debug('leaveEvent in BaseDocGraphicsView')
+        self.isMouseOver = False
+        return super().leaveEvent(ev)

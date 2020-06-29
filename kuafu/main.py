@@ -32,13 +32,14 @@ from docgraphicsview import DocGraphicsView
 HOMEDIR = os.path.expanduser("~")
 
 class MainWindow(QtWidgets.QMainWindow, Ui_window):
-    def __init__(self, screens):
+    def __init__(self, screens, app_data_path):
         super(MainWindow, self).__init__() # Call the inherited classes __init__ method
         self.setupUi(self)
 
         self.screen_dpi = screens[0].logicalDotsPerInch()
+        self.app_data_path = app_data_path
         
-        self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi)
+        self.libWidget = LibraryView(self.centraltabwidget, self.screen_dpi, self.app_data_path)
         self.libWidget.fileReselected.connect(self.onFileReselected)
         self.libWidget.showStatusRequested.connect(self.onShowStatusRequested)
         self.centraltabwidget.addTab(self.libWidget, "My Library")
@@ -118,6 +119,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         self.addRecentFiles()
 
         self.show()
+
+        self.loadPDFfile(self.recent_files[0]) # load the latest one
 
     def onShowStatusRequested(self, msg):
         self.showStatus(msg)
@@ -302,7 +305,15 @@ def collapseUser(path):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    win = MainWindow(app.screens())
+    # 
+    # https://stackoverflow.com/questions/32525196/how-to-get-a-settings-storage-path-in-a-cross-platform-way-in-qt
+    app.setOrganizationDomain("huyinlin@gmail.com")
+    app.setApplicationName("kuafu")
+    app_data_path = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.AppDataLocation)
+    if not os.path.exists(app_data_path):
+        os.makedirs(app_data_path)
+    # 
+    win = MainWindow(app.screens(), app_data_path)
     if len(sys.argv)>1 and os.path.exists(os.path.abspath(sys.argv[-1])):
         win.loadPDFfile(os.path.abspath(sys.argv[-1]))
     app.aboutToQuit.connect(win.onAppQuit)

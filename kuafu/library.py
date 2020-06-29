@@ -13,6 +13,7 @@ from toc import TocManager
 
 import os
 import numpy as np
+import json
 
 class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     # renderRequested = QtCore.pyqtSignal(int, float)
@@ -25,11 +26,12 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     showStatusRequested = QtCore.pyqtSignal(str)
     fileReselected = QtCore.pyqtSignal(str)
 
-    def __init__(self, parent, screen_dpi):
+    def __init__(self, parent, screen_dpi, app_data_path):
         super(LibraryView, self).__init__(parent) # Call the inherited classes __init__ method
         self.setupUi(self)
 
         self.screen_dpi = screen_dpi
+        self.app_data_path = app_data_path
         self.filename = ''
 
         # self.splitter_doc.setSizes([1, 0]) # set relative widths of its children
@@ -64,7 +66,8 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
 
         self.preview_graphicsview.loadFinished.connect(self.onDoc1LoadFinished)
         self.thumb_graphicsview.loadFinished.connect(self.onThumbLoadFinished)
-        self.thumb_graphicsview.pageRelocationRequest.connect(self.onPageRelocationRequest)
+        self.thumb_graphicsview.pageRelocationRequest.connect(self.onThumbPageRelocationRequest)
+        self.thumb_graphicsview.zoomRequest.connect(self.onThumbZoomRequest)
 
         # self.repos = ["/home/yhu/下载/", "/home/yhu/tmp/"]
 
@@ -123,19 +126,29 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         # 
         self.filename = filename
         self.screen_dpi = screep_dpi
-        self.thumb_graphicsview.setDocument(self.filename, self.screen_dpi)
+        self.loadDocument(filename, screep_dpi)
         self.fileReselected.emit(self.filename)
 
     def onFileClick(self, m_index):
         # remove all annotatoin first
         # self.annotview_model.removeRows(0, self.annotview_model.rowCount())
 
+        # save view status of the last file
+        self.saveDocumentViewStatus(self.filename)
+
         self.filename = self.current_dir + os.sep + self.fileview_model.data(m_index, QtCore.Qt.UserRole + 1)
         print(self.filename)
-
-        self.thumb_graphicsview.setDocument(self.filename, self.screen_dpi)
+        
+        self.loadDocument(self.filename, self.screen_dpi)
         self.fileReselected.emit(self.filename)
                 
+    def loadDocument(self, filename, screen_dpi):
+        viewStatus = self.loadDocumentViewStatus(filename)
+        mainViewStatus = viewStatus['mainView'] if viewStatus else None
+        self.preview_graphicsview.setDocument(filename, screen_dpi, mainViewStatus)
+        thumbViewStatus = viewStatus['thumbView'] if viewStatus else None
+        self.thumb_graphicsview.setDocument(filename, screen_dpi, thumbViewStatus)
+
     def onTocLoaded(self, toc):
         self.tocManager.setToc(toc)
         self.tocManager.update(self.current_page_idx)
@@ -151,8 +164,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
 
     def onThumbLoadFinished(self):
         # debug("onThumbLoadFinished")
-        self.thumb_graphicsview.setColumnNumber(4)
-        self.preview_graphicsview.setDocument(self.filename, self.screen_dpi)
+        pass
 
     def onDocViewportChanged(self, filename, page_counts, visible_regions):
         # debug("Doc viewport changed: ", visible_regions)
@@ -171,9 +183,18 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.gotoPage(page_no - 1)
         self.lineEdit_pageNo.clearFocus()
 
-    def onPageRelocationRequest(self, page_no, x_ratio, y_ratio):
+    def onThumbPageRelocationRequest(self, page_no, x_ratio, y_ratio):
         # debug("onPageRelocationRequest: <%d> (%.2f, %.2f)" % (page_no, x_ratio, y_ratio))
-        self.preview_graphicsview.centerOnPage(page_no, x_ratio, y_ratio)
+        viewRect = self.preview_graphicsview.viewport()
+        self.preview_graphicsview.viewAtPageAnchor([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
+
+    def onThumbZoomRequest(self, zoomInFlag, page_no, x_ratio, y_ratio):
+        # debug("onThumbZoomRequest: %d, <%d> (%.2f, %.2f)" % (zoomInFlag, page_no, x_ratio, y_ratio))
+        viewRect = self.preview_graphicsview.viewport()
+        if zoomInFlag:
+            self.preview_graphicsview.zoomIn([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
+        else:
+            self.preview_graphicsview.zoomOut([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
 
     def onViewColumnChanged(self, viewColumn):
         if viewColumn == 1:
@@ -309,13 +330,29 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
 
     def closeEvent(self, ev):
         debug('closeEvent in LibraryView')
+        self.saveDocumentViewStatus(self.filename)
         self.preview_graphicsview.close()
-        # self.preview_graphicsview_2.close()
         self.thumb_graphicsview.close()
-        
-        # #  wait for the reader thread to exit
-        # loop = QtCore.QEventLoop()
-        # self.pdf_reader_thread.finished.connect(loop.quit)
-        # self.pdf_reader_thread.quit()
-        # loop.exec_()
-        # debug('pdf_reader_thread exit')
+
+    def loadDocumentViewStatus(self, filename):
+        dataFileName = self.app_data_path + os.sep + filename.replace(os.sep, '_') + '.json'
+        try:
+            with open(dataFileName, 'r') as f:
+                status = json.load(f)
+                return status
+        except:
+            return None
+
+    def saveDocumentViewStatus(self, filename):
+        debug(self.preview_graphicsview.current_filename, filename)
+        assert(self.preview_graphicsview.current_filename == filename)
+        assert(self.thumb_graphicsview.current_filename == filename)
+        mainViewStatus = self.preview_graphicsview.getViewStatus()
+        thumbViewStatus = self.thumb_graphicsview.getViewStatus()
+        outDict = {
+            "mainView": mainViewStatus,
+            "thumbView": thumbViewStatus
+        }
+        dataFileName = self.app_data_path + os.sep + filename.replace(os.sep, '_') + '.json'
+        with open(dataFileName, 'w') as f:
+            json.dump(outDict, f, indent=True)

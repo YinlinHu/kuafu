@@ -7,16 +7,16 @@ from utils import debug
 
 class ThumbGraphicsView(BaseDocGraphicsView):
     pageRelocationRequest = QtCore.pyqtSignal(int, float, float)
+    zoomRequest = QtCore.pyqtSignal(bool, int, float, float)
 
     def __init__(self, parent, render_num=4):
         super(ThumbGraphicsView, self).__init__(parent, render_num)
 
+        self.view_column_count = 2
+        
         self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.white)) # set background
 
         self.setDragMode(QtWidgets.QGraphicsView.NoDrag) # disable the default dragger
-
-        self.isMousePressed = False
-        self.isMouseOver = False
 
     def highlightVisibleMasks(self, filename, visible_regions):
         # the items in visible_regions are in normalized coordinates
@@ -51,9 +51,8 @@ class ThumbGraphicsView(BaseDocGraphicsView):
         # debug('mousePressEvent in ThumbGraphicsView')
         if not self.load_finished_flag:
             return
-        self.isMousePressed = True
         self.setCursor(QtCore.Qt.ClosedHandCursor)
-        page_no, x_ratio, y_ratio = self.getPageByPos(ev.pos().x(), ev.pos().y())
+        page_no, x_ratio, y_ratio, _, _ = self.getPageByPos(ev.pos().x(), ev.pos().y())
         self.pageRelocationRequest.emit(page_no, x_ratio, y_ratio)
         return super().mousePressEvent(ev)
 
@@ -61,7 +60,6 @@ class ThumbGraphicsView(BaseDocGraphicsView):
         # debug('mouseReleaseEvent in ThumbGraphicsView')
         if not self.load_finished_flag:
             return
-        self.isMousePressed = False
         self.setCursor(QtCore.Qt.ArrowCursor)
         return super().mouseReleaseEvent(ev)
 
@@ -70,16 +68,21 @@ class ThumbGraphicsView(BaseDocGraphicsView):
         if not self.load_finished_flag:
             return
         if self.isMousePressed:
-            page_no, x_ratio, y_ratio = self.getPageByPos(ev.pos().x(), ev.pos().y())
+            page_no, x_ratio, y_ratio, _, _ = self.getPageByPos(ev.pos().x(), ev.pos().y())
             self.pageRelocationRequest.emit(page_no, x_ratio, y_ratio)
         return super().mouseMoveEvent(ev)
 
-    def enterEvent(self, ev):
-        # debug('enterEvent in ThumbGraphicsView')
-        self.isMouseOver = True
-        return super().enterEvent(ev)
-    
-    def leaveEvent(self, ev):
-        # debug('leaveEvent in ThumbGraphicsView')
-        self.isMouseOver = False
-        return super().leaveEvent(ev)
+    def wheelEvent(self, ev):
+        # debug("wheelEvent in ThumbGraphicsView")
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
+        if modifiers == QtCore.Qt.ControlModifier:
+            page_no, x_ratio, y_ratio, _, _ = self.getPageByPos(ev.pos().x(), ev.pos().y())
+            delta = ev.angleDelta()
+            if delta.y() > 0:
+                self.zoomRequest.emit(True, page_no, x_ratio, y_ratio) # zoom in request
+            else:
+                self.zoomRequest.emit(False, page_no, x_ratio, y_ratio) # zoom out request
+            ev.accept() # accept an event in order to stop it from propagating further
+        else:
+            return super().wheelEvent(ev) # call parent's handler, making the view scrolled (touch included)
+
