@@ -68,7 +68,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
         self.screen_dpi = 0
 
-        self.zoom_levels = [0.12, 0.25, 0.33, 0.50, 0.66, 0.75, 1.0, 1.25, 1.5, 2.0, 4.0, 8.0]
+        self.zoom_levels = [0.12, 0.25, 0.33, 0.50, 0.66, 0.75, 1.0, 1.25, 1.5, 2.0, 4.0, 8.0, 16.0]
         self.current_zoom_index = -1
         self.fitwidth_flag = True
 
@@ -204,8 +204,8 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
     def computePagesDPI(self):
         self.current_rendering_dpi = []
         self.current_pages_size_pix =[]
-        if self.page_counts == 0:
-            return
+        assert(self.page_counts > 0)
+        assert(len(self.pages_size_inch) == self.page_counts)
 
         if self.fitwidth_flag:
             # all pages will have the same width, but may different height
@@ -490,7 +490,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         return page_no, x_ratio, y_ratio, view_x, view_y
 
     def redrawPages(self, relocationInfo=None):
-        if self.page_counts == 0:
+        if not self.load_finished_flag:
             return
 
         # time_0 = time.time()

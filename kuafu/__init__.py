@@ -34,6 +34,6 @@ Changes :
 # TODO:
 #
 # FIXME :
-# PyMuPDF will freeze when zoom at 1600% for some files (disabled)
+# 
 
-__version__ = '0.0.26'
+__version__ = '0.0.28'

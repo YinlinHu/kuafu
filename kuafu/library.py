@@ -103,9 +103,11 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.current_page_idx = -1
         self.pageCounts = 0
 
-    def setFileList(self, dirname):
+    def setFileList(self, filename):
         # remove all file list first
         self.fileview_model.removeRows(0, self.fileview_model.rowCount())
+
+        dirname = os.path.dirname(filename)
 
         self.current_dir = dirname
         self.fileview_model.setHorizontalHeaderLabels([self.current_dir])
@@ -113,16 +115,20 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         parent_file_item = self.fileview_model.invisibleRootItem()
 
         pdf_filenames = os.listdir(dirname)
+        pdf_filenames.sort()
         for name in pdf_filenames:
             path = dirname + os.sep + name
             if os.path.isfile(path) and path.endswith('.pdf'):
                 item = QtGui.QStandardItem(name)
                 item.setData(name, QtCore.Qt.UserRole + 1)
                 parent_file_item.appendRow(item)
+                if path == filename:
+                    modelIndex = self.fileview_model.indexFromItem(item)
+        self.fileview.scrollTo(modelIndex, QtWidgets.QAbstractItemView.ScrollHint.PositionAtCenter)
+        self.fileview.selectionModel().setCurrentIndex(modelIndex, QtCore.QItemSelectionModel.Select)
 
     def setDocument(self, filename, screep_dpi):
-        currentDir = os.path.dirname(filename)
-        self.setFileList(currentDir)
+        self.setFileList(filename)
         # 
         self.filename = filename
         self.screen_dpi = screep_dpi
