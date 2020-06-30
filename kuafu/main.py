@@ -120,7 +120,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
 
         self.show()
 
-        self.loadPDFfile(self.recent_files[0]) # load the latest one
+        if len(self.recent_files) > 0:
+            self.loadPDFfile(self.recent_files[0]) # load the latest one
 
     def onShowStatusRequested(self, msg):
         self.showStatus(msg)
@@ -267,7 +268,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
 
         # filename = widget.filename
         # current_page = widget.current_page
-        if len(self.libWidget.filename) > 0:
+        if self.libWidget.filename:
             self.saveFileData(self.libWidget.filename, 0)
         # 
         geometry = self.saveGeometry()

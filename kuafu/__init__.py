@@ -32,7 +32,8 @@ Changes :
 """
 
 # TODO:
-# There will be duplicated rendering when have multiple requests
+#
 # FIXME :
+# PyMuPDF will freeze when zoom at 1600% for some files (disabled)
 
-__version__ = '0.0.23'
+__version__ = '0.0.26'

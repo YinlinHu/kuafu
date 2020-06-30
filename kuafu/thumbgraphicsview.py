@@ -9,11 +9,9 @@ class ThumbGraphicsView(BaseDocGraphicsView):
     pageRelocationRequest = QtCore.pyqtSignal(int, float, float)
     zoomRequest = QtCore.pyqtSignal(bool, int, float, float)
 
-    def __init__(self, parent, render_num=4):
+    def __init__(self, parent, render_num=2):
         super(ThumbGraphicsView, self).__init__(parent, render_num)
 
-        self.view_column_count = 2
-        
         self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.white)) # set background
 
         self.setDragMode(QtWidgets.QGraphicsView.NoDrag) # disable the default dragger

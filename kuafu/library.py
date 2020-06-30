@@ -32,28 +32,28 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
 
         self.screen_dpi = screen_dpi
         self.app_data_path = app_data_path
-        self.filename = ''
+        self.filename = None
 
         # self.splitter_doc.setSizes([1, 0]) # set relative widths of its children
         # self.splitter_doc.setCollapsible(0, False) 
-        self.pushButton_oneColumn.clicked.connect(lambda:self.preview_graphicsview.setColumnNumber(1))
-        self.pushButton_twoColumn.clicked.connect(lambda:self.preview_graphicsview.setColumnNumber(2))
-        self.pushButton_fourColumn.clicked.connect(lambda:self.preview_graphicsview.setColumnNumber(4))
+        self.pushButton_oneColumn.clicked.connect(self.onSetOneColumn)
+        self.pushButton_twoColumn.clicked.connect(self.onSetTwoColumn)
+        self.pushButton_fourColumn.clicked.connect(self.onSetFourColumn)
         self.pushButton_emptyPage.clicked.connect(self.onSetPrecedingEmptypage)
-        self.pushButton_zoomIn.clicked.connect(lambda:self.zoomIn())
-        self.pushButton_zoomOut.clicked.connect(lambda:self.zoomOut())
-        self.pushButton_zoomFitWidth.clicked.connect(lambda:self.zoomFitWidth())
+        self.pushButton_zoomIn.clicked.connect(self.zoomIn)
+        self.pushButton_zoomOut.clicked.connect(self.zoomOut)
+        self.pushButton_zoomFitWidth.clicked.connect(self.zoomFitWidth)
 
-        self.pushButton_oneColumn_2.clicked.connect(lambda:self.thumb_graphicsview.setColumnNumber(1))
-        self.pushButton_twoColumn_2.clicked.connect(lambda:self.thumb_graphicsview.setColumnNumber(2))
-        self.pushButton_fourColumn_2.clicked.connect(lambda:self.thumb_graphicsview.setColumnNumber(4))
-        self.pushButton_emptyPage_2.clicked.connect(self.onThumbSetPrecedingEmptypage)
+        # self.pushButton_oneColumn_2.clicked.connect(lambda:self.thumb_graphicsview.setColumnNumber(1))
+        # self.pushButton_twoColumn_2.clicked.connect(lambda:self.thumb_graphicsview.setColumnNumber(2))
+        # self.pushButton_fourColumn_2.clicked.connect(lambda:self.thumb_graphicsview.setColumnNumber(4))
+        # self.pushButton_emptyPage_2.clicked.connect(self.onThumbSetPrecedingEmptypage)
 
         self.preview_graphicsview.viewColumnChanged.connect(self.onViewColumnChanged)
-        self.thumb_graphicsview.viewColumnChanged.connect(self.onThumbViewColumnChanged)
+        # self.thumb_graphicsview.viewColumnChanged.connect(self.onThumbViewColumnChanged)
 
         self.preview_graphicsview.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
-        self.thumb_graphicsview.emptyLeadingPageChanged.connect(self.onThumbEmptyLeadingPageChanged)
+        # self.thumb_graphicsview.emptyLeadingPageChanged.connect(self.onThumbEmptyLeadingPageChanged)
 
         self.preview_graphicsview.zoomRatioChanged.connect(self.onZoomRatioChanged)
 
@@ -236,16 +236,20 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
             self.pushButton_zoomFitWidth.setChecked(False)
             self.showStatusRequested.emit("Zoom to %d%%" % int(zoomRatio * 100))
 
+    def onSetOneColumn(self):
+        self.preview_graphicsview.setColumnNumber(1)
+        self.thumb_graphicsview.setColumnNumber(1)
+
+    def onSetTwoColumn(self):
+        self.preview_graphicsview.setColumnNumber(2)
+        self.thumb_graphicsview.setColumnNumber(2)
+
+    def onSetFourColumn(self):
+        self.preview_graphicsview.setColumnNumber(4)
+        self.thumb_graphicsview.setColumnNumber(4)
+
     def onSetPrecedingEmptypage(self):
         if self.pushButton_emptyPage.isChecked():
-            self.preview_graphicsview.setPrecedingEmptyPage(1)
-            self.thumb_graphicsview.setPrecedingEmptyPage(1)
-        else:
-            self.preview_graphicsview.setPrecedingEmptyPage(0)
-            self.thumb_graphicsview.setPrecedingEmptyPage(0) 
-
-    def onThumbSetPrecedingEmptypage(self):
-        if self.pushButton_emptyPage_2.isChecked():
             self.preview_graphicsview.setPrecedingEmptyPage(1)
             self.thumb_graphicsview.setPrecedingEmptyPage(1)
         else:
@@ -257,14 +261,6 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
             self.pushButton_emptyPage.setChecked(False)
         elif emptyPages == 1:
             self.pushButton_emptyPage.setChecked(True)
-        else:
-            assert(0)
-
-    def onThumbEmptyLeadingPageChanged(self, emptyPages):
-        if emptyPages == 0:
-            self.pushButton_emptyPage_2.setChecked(False)
-        elif emptyPages == 1:
-            self.pushButton_emptyPage_2.setChecked(True)
         else:
             assert(0)
 
@@ -312,13 +308,6 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     def gotoPage(self, pg_no):
         self.preview_graphicsview.gotoPage(pg_no)
 
-    def setColumnNumber(self, colNum):
-        self.preview_graphicsview.setColumnNumber(colNum)
-
-    def setPrecedingEmptyPage(self, emptyNum):
-        self.preview_graphicsview.setPrecedingEmptyPage(emptyNum)
-        self.thumb_graphicsview.setPrecedingEmptyPage(emptyNum)
-
     def zoomIn(self):
         self.preview_graphicsview.zoomIn()
 
@@ -344,9 +333,11 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
             return None
 
     def saveDocumentViewStatus(self, filename):
-        debug(self.preview_graphicsview.current_filename, filename)
+        # debug(self.preview_graphicsview.current_filename, filename)
+        if filename is None or not os.path.exists(filename):
+            return
+            
         assert(self.preview_graphicsview.current_filename == filename)
-        assert(self.thumb_graphicsview.current_filename == filename)
         mainViewStatus = self.preview_graphicsview.getViewStatus()
         thumbViewStatus = self.thumb_graphicsview.getViewStatus()
         outDict = {

@@ -3,9 +3,7 @@ from PyQt5 import QtGui
 
 # https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
 # MuPDF is much faster at rendering, but slower at loading (get_page_sizes()) and also use more memories
-# 
-# TODO Mupdf freezes and crashes very often
-BACKEND_MuPDF = False
+BACKEND_MuPDF = True
 
 if BACKEND_MuPDF:
     import fitz
@@ -271,10 +269,12 @@ class PdfRender(Process):
                 x2 = min(max(x2, 0), page_rect.width)
                 y2 = min(max(y2, 0), page_rect.height)
                 clip = fitz.Rect(x1, y1, x2, y2)
+                # debug("Render In: ", zoom_ratio, clip)
                 pix = page.getPixmap(matrix=fitz.Matrix(zoom_ratio, zoom_ratio), clip=clip, alpha=False)
                 # set the correct QImage format depending on alpha
                 fmt = QtGui.QImage.Format_RGBA8888 if pix.alpha else QtGui.QImage.Format_RGB888
                 img = QtGui.QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
+                # debug("Render Out: ", img.width(), img.height())
                 # 
                 roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
             else:
@@ -293,7 +293,6 @@ class PdfRender(Process):
                 # 
                 roi.setCoords(x1, y1, x2, y2) # write back roi
             
-
             # # Add Heighlight over Link Annotation
             # self.painter.begin(img)
             # annots = page.annotations()

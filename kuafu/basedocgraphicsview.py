@@ -68,7 +68,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
         self.screen_dpi = 0
 
-        self.zoom_levels = [0.12, 0.25, 0.33, 0.50, 0.66, 0.75, 1.0, 1.25, 1.5, 2.0, 4.0, 8.0, 16.0]
+        self.zoom_levels = [0.12, 0.25, 0.33, 0.50, 0.66, 0.75, 1.0, 1.25, 1.5, 2.0, 4.0, 8.0]
         self.current_zoom_index = -1
         self.fitwidth_flag = True
 
@@ -134,6 +134,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.rendered_info = {}
         self.current_highlighted_pages = []
         self.load_finished_flag = False
+        self.view_column_count = 1
         self.leading_empty_pages = 0
         self.fitwidth_flag = True
         # 
