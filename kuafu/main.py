@@ -89,17 +89,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         # self.statusbar.setMaximumHeight(16)
         # self.statusbar.hide()
 
-        # Import settings
-        desktop = QtWidgets.QApplication.desktop()
-        self.settings = QtCore.QSettings("kuafu", "main", self)
-        self.recent_files = self.settings.value("RecentFiles", [])
-        self.history_filenames = self.settings.value("HistoryFileNameList", [])
-        self.history_page_no = self.settings.value("HistoryPageNoList", [])
-        geometry = self.settings.value('geometry', bytes('', 'utf-8'))
-        self.restoreGeometry(geometry)
-        
-        state = self.settings.value('library/spliter', bytes('', 'utf-8'))
-        self.libWidget.splitter.restoreState(state)
         # state = self.settings.value('library/spliter_doc', bytes('', 'utf-8'))
         # self.libWidget.splitter_doc.restoreState(state)
 
@@ -115,13 +104,21 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
         # self.findCloseButton.clicked.connect(self.dockSearch.hide)
         # self.dockSearch.visibilityChanged.connect(self.toggleFindMode)
 
+    def loadSettings(self):
+        # Import settings
+        desktop = QtWidgets.QApplication.desktop()
+        self.settings = QtCore.QSettings("kuafu", "main", self)
+        self.recent_files = self.settings.value("RecentFiles", [])
+        self.history_filenames = self.settings.value("HistoryFileNameList", [])
+        self.history_page_no = self.settings.value("HistoryPageNoList", [])
+        geometry = self.settings.value('geometry', bytes('', 'utf-8'))
+        self.restoreGeometry(geometry)
+        
+        state = self.settings.value('library/spliter', bytes('', 'utf-8'))
+        self.libWidget.splitter.restoreState(state)
+
         self.recent_files_actions = []
         self.addRecentFiles()
-
-        self.show()
-
-        if len(self.recent_files) > 0:
-            self.loadPDFfile(self.recent_files[0]) # load the latest one
 
     def onShowStatusRequested(self, msg):
         self.showStatus(msg)
@@ -315,8 +312,15 @@ def main():
         os.makedirs(app_data_path)
     # 
     win = MainWindow(app.screens(), app_data_path)
+    win.loadSettings()
+    win.show()
+
     if len(sys.argv)>1 and os.path.exists(os.path.abspath(sys.argv[-1])):
         win.loadPDFfile(os.path.abspath(sys.argv[-1]))
+    else:
+        if len(win.recent_files) > 0 and os.path.exists(win.recent_files[0]):
+            win.loadPDFfile(win.recent_files[0]) # load the latest one
+            
     app.aboutToQuit.connect(win.onAppQuit)
     sys.exit(app.exec_())
 

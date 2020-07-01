@@ -16,6 +16,13 @@ class ThumbGraphicsView(BaseDocGraphicsView):
 
         self.setDragMode(QtWidgets.QGraphicsView.NoDrag) # disable the default dragger
 
+    def onPageSizesReceived(self, pages_size_inch):
+        super(ThumbGraphicsView, self).onPageSizesReceived(pages_size_inch) # call parent's implementation
+        # add some more
+        for i in range(self.page_counts):
+            tipStr = ("Page %d" % (i+1))
+            self.page_items[i].setToolTip(tipStr)
+            
     def highlightVisibleMasks(self, filename, visible_regions):
         # the items in visible_regions are in normalized coordinates
         # 
