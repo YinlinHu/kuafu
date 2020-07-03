@@ -3,9 +3,6 @@ from PyQt5 import QtCore
 from PyQt5 import QtGui
 # from PyQt5 import QtOpenGL
 
-# import fitz #PyMuPDF
-from popplerqt5 import Poppler
-
 from pdfworker import PdfRender
 from multiprocessing import Queue
 from page import PageGraphicsItem
@@ -23,6 +20,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
     zoomRatioChanged = QtCore.pyqtSignal(float)
     viewColumnChanged = QtCore.pyqtSignal(int)
     emptyLeadingPageChanged = QtCore.pyqtSignal(int)
+    focusIn = QtCore.pyqtSignal()
 
     def __init__(self, parent, render_num):
         super(BaseDocGraphicsView, self).__init__(parent)
@@ -107,6 +105,14 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.queue_timer = QtCore.QTimer(self)
         self.queue_timer.timeout.connect(self.retrieveQueueResults)
         self.queue_timer.start(20)
+
+    def refreshSignals(self):
+        self.viewColumnChanged.emit(self.view_column_count)
+        self.emptyLeadingPageChanged.emit(self.leading_empty_pages)
+        if self.fitwidth_flag:
+            self.zoomRatioChanged.emit(0)
+        else:
+            self.zoomRatioChanged.emit(self.zoom_levels[self.current_zoom_index])
 
     def getViewStatus(self):
         if not self.load_finished_flag:
@@ -311,16 +317,16 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
                 self.renderRequest(page_no, dpi, roi, render_idx, self.current_visible_regions)
 
-                # debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %.1f %.1f %.1f %.1f> <roi: %.1f %.1f %.1f %.1f>" % (
-                #     render_idx, page_no, dpi, 
-                #     roi_raw.left(), roi_raw.top(), roi_raw.width(), roi_raw.height(), 
-                #     roi.left(), roi.top(), roi.width(), roi.height()
-                #     ))
+                debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %.1f %.1f %.1f %.1f> <roi: %.1f %.1f %.1f %.1f>" % (
+                    render_idx, page_no, dpi, 
+                    roi_raw.left(), roi_raw.top(), roi_raw.width(), roi_raw.height(), 
+                    roi.left(), roi.top(), roi.width(), roi.height()
+                    ))
 
     def handleSingleRenderedImage(self, render_idx, filename, page_no, dpi, roi, img_byte_array):
-        # debug("-> Rendering %d Completed : <page:%d> <dpi:%.2f> <roi: %.1f %.1f %.1f %.1f>" % (
-        #     render_idx, page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
-        # ))
+        debug("-> Rendering %d Completed : <page:%d> <dpi:%.2f> <roi: %.1f %.1f %.1f %.1f>" % (
+            render_idx, page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
+        ))
 
         # if page_no not in self.current_visible_regions:
         #     debug("become unvisible: %d. skipping" % page_no)
@@ -644,3 +650,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         # debug('leaveEvent in BaseDocGraphicsView')
         self.isMouseOver = False
         return super().leaveEvent(ev)
+
+    def focusInEvent(self, ev):
+        self.focusIn.emit()
+        return super().focusInEvent(ev)

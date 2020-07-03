@@ -34,11 +34,12 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.app_data_path = app_data_path
         self.filename = None
 
-        # self.splitter_doc.setSizes([1, 0]) # set relative widths of its children
-        # self.splitter_doc.setCollapsible(0, False) 
-        self.pushButton_oneColumn.clicked.connect(lambda:self.preview_graphicsview.setColumnNumber(1))
-        self.pushButton_twoColumn.clicked.connect(lambda:self.preview_graphicsview.setColumnNumber(2))
-        self.pushButton_fourColumn.clicked.connect(lambda:self.preview_graphicsview.setColumnNumber(4))
+        self.splitter_doc.setSizes([1, 0]) # the second view is folded by default
+        self.splitter_doc.setCollapsible(0, False) 
+
+        self.pushButton_oneColumn.clicked.connect(self.onOneColumnClicked)
+        self.pushButton_twoColumn.clicked.connect(self.onTwoColumnClicked)
+        self.pushButton_fourColumn.clicked.connect(self.onFourColumnClicked)
         self.pushButton_emptyPage.clicked.connect(self.setPrecedingEmptypage)
         self.pushButton_zoomIn.clicked.connect(self.zoomIn)
         self.pushButton_zoomOut.clicked.connect(self.zoomOut)
@@ -49,27 +50,32 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.pushButton_fourColumn_thumb.clicked.connect(lambda:self.thumb_graphicsview.setColumnNumber(4))
         self.pushButton_emptyPage_thumb.clicked.connect(self.setThumbPrecedingEmptypage)
 
-        self.preview_graphicsview.viewColumnChanged.connect(self.onViewColumnChanged)
+        self.doc_graphicsview_1.loadFinished.connect(self.onDoc1LoadFinished)
+        self.doc_graphicsview_1.viewColumnChanged.connect(self.onViewColumnChanged)
+        self.doc_graphicsview_1.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
+        self.doc_graphicsview_1.zoomRatioChanged.connect(self.onZoomRatioChanged)
+        self.doc_graphicsview_1.tocLoaded.connect(self.onTocLoaded)
+        self.doc_graphicsview_1.viewportChanged.connect(self.onDocViewportChanged)
+        self.doc_graphicsview_1.focusIn.connect(self.OnDoc1FocusIn)
+
+        self.doc_graphicsview_2.loadFinished.connect(self.onDoc1LoadFinished)
+        self.doc_graphicsview_2.viewColumnChanged.connect(self.onViewColumnChanged)
+        self.doc_graphicsview_2.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
+        self.doc_graphicsview_2.zoomRatioChanged.connect(self.onZoomRatioChanged)
+        self.doc_graphicsview_2.tocLoaded.connect(self.onTocLoaded)
+        self.doc_graphicsview_2.viewportChanged.connect(self.onDocViewportChanged)
+        self.doc_graphicsview_2.focusIn.connect(self.OnDoc2FocusIn)
+
         self.thumb_graphicsview.viewColumnChanged.connect(self.onThumbViewColumnChanged)
-
-        self.preview_graphicsview.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
         self.thumb_graphicsview.emptyLeadingPageChanged.connect(self.onThumbEmptyLeadingPageChanged)
-
-        self.preview_graphicsview.zoomRatioChanged.connect(self.onZoomRatioChanged)
-
-        self.preview_graphicsview.tocLoaded.connect(self.onTocLoaded)
-
-        self.preview_graphicsview.viewportChanged.connect(self.onDocViewportChanged)
-        # self.preview_graphicsview_2.viewportChanged.connect(self.onDocViewportChanged)
-
-        self.lineEdit_pageNo.gotoPageTrigger.connect(self.onGotoPageTrigger)
-
-        self.preview_graphicsview.loadFinished.connect(self.onDoc1LoadFinished)
         self.thumb_graphicsview.loadFinished.connect(self.onThumbLoadFinished)
         self.thumb_graphicsview.pageRelocationRequest.connect(self.onThumbPageRelocationRequest)
         self.thumb_graphicsview.zoomRequest.connect(self.onThumbZoomRequest)
 
+        self.lineEdit_pageNo.gotoPageTrigger.connect(self.onGotoPageTrigger)
+
         # self.repos = ["/home/yhu/下载/", "/home/yhu/tmp/"]
+        self.current_graphicsview = self.doc_graphicsview_1
 
         self.fileview_model = QtGui.QStandardItemModel(self)
         self.fileview.setModel(self.fileview_model)
@@ -150,10 +156,18 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
                 
     def loadDocument(self, filename, screen_dpi):
         viewStatus = self.loadDocumentViewStatus(filename)
-        mainViewStatus = viewStatus['mainView'] if viewStatus else None
-        self.preview_graphicsview.setDocument(filename, screen_dpi, mainViewStatus)
-        thumbViewStatus = viewStatus['thumbView'] if viewStatus else None
-        self.thumb_graphicsview.setDocument(filename, screen_dpi, thumbViewStatus)
+        status = viewStatus['docView1'] if viewStatus else None
+        self.doc_graphicsview_1.setDocument(filename, screen_dpi, status)
+        status = viewStatus['docView2'] if viewStatus else None
+        self.doc_graphicsview_2.setDocument(filename, screen_dpi, status)
+        status = viewStatus['thumbView'] if viewStatus else None
+        self.thumb_graphicsview.setDocument(filename, screen_dpi, status)
+        status = viewStatus['docSplitter'] if viewStatus else None
+        if status:
+            status = QtCore.QByteArray.fromHex(bytes(status, 'utf-8'))
+            self.splitter_doc.restoreState(status)
+        else:
+            self.splitter_doc.setSizes([1, 0]) # the second view is folded by default
 
     def onTocLoaded(self, toc):
         self.tocManager.setToc(toc)
@@ -161,7 +175,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
 
     def onTocIndexChanged(self, page_no):
         debug("onTocIndexChanged: %d" % page_no)
-        self.preview_graphicsview.gotoPage(page_no)
+        self.current_graphicsview.gotoPage(page_no)
 
     def onDoc1LoadFinished(self):
         # debug("onDoc1LoadFinished")
@@ -183,22 +197,32 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.lineEdit_pageNo.setPageInfo(self.current_page_idx+1, page_counts)
         self.label_pageCount.setText(" %d " % page_counts)
 
+    def OnDoc1FocusIn(self):
+        # debug("OnDoc1FocusIn")
+        self.current_graphicsview = self.doc_graphicsview_1
+        self.current_graphicsview.refreshSignals()
+
+    def OnDoc2FocusIn(self):
+        # debug("OnDoc2FocusIn")
+        self.current_graphicsview = self.doc_graphicsview_2
+        self.current_graphicsview.refreshSignals()
+
     def onGotoPageTrigger(self, page_no):
         self.gotoPage(page_no)
         self.lineEdit_pageNo.clearFocus()
 
     def onThumbPageRelocationRequest(self, page_no, x_ratio, y_ratio):
         # debug("onPageRelocationRequest: <%d> (%.2f, %.2f)" % (page_no, x_ratio, y_ratio))
-        viewRect = self.preview_graphicsview.viewport()
-        self.preview_graphicsview.viewAtPageAnchor([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
+        viewRect = self.current_graphicsview.viewport()
+        self.current_graphicsview.viewAtPageAnchor([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
 
     def onThumbZoomRequest(self, zoomInFlag, page_no, x_ratio, y_ratio):
         # debug("onThumbZoomRequest: %d, <%d> (%.2f, %.2f)" % (zoomInFlag, page_no, x_ratio, y_ratio))
-        viewRect = self.preview_graphicsview.viewport()
+        viewRect = self.current_graphicsview.viewport()
         if zoomInFlag:
-            self.preview_graphicsview.zoomIn([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
+            self.current_graphicsview.zoomIn([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
         else:
-            self.preview_graphicsview.zoomOut([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
+            self.current_graphicsview.zoomOut([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
 
     def onViewColumnChanged(self, viewColumn):
         if viewColumn == 1:
@@ -240,11 +264,21 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
             self.pushButton_zoomFitWidth.setChecked(False)
             self.showStatusRequested.emit("Zoom to %d%%" % int(zoomRatio * 100))
 
+
+    def onOneColumnClicked(self):
+        self.current_graphicsview.setColumnNumber(1)
+
+    def onTwoColumnClicked(self):
+        self.current_graphicsview.setColumnNumber(2)
+
+    def onFourColumnClicked(self):
+        self.current_graphicsview.setColumnNumber(4)
+
     def setPrecedingEmptypage(self):
         if self.pushButton_emptyPage.isChecked():
-            self.preview_graphicsview.setPrecedingEmptyPage(1)
+            self.current_graphicsview.setPrecedingEmptyPage(1)
         else:
-            self.preview_graphicsview.setPrecedingEmptyPage(0)
+            self.current_graphicsview.setPrecedingEmptyPage(0)
 
     def setThumbPrecedingEmptypage(self):
         if self.pushButton_emptyPage_thumb.isChecked():
@@ -303,28 +337,23 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
 
                 parent_item.appendRow([item, dateItem])
 
-    def goNextPage(self):
-        self.preview_graphicsview.goNextPage()
-
-    def goPrevPage(self):
-        self.preview_graphicsview.goPrevPage()
-
     def gotoPage(self, pg_no):
-        self.preview_graphicsview.gotoPage(pg_no)
+        self.current_graphicsview.gotoPage(pg_no)
 
     def zoomIn(self):
-        self.preview_graphicsview.zoomIn()
+        self.current_graphicsview.zoomIn()
 
     def zoomOut(self):
-        self.preview_graphicsview.zoomOut()
+        self.current_graphicsview.zoomOut()
 
     def zoomFitWidth(self):
-        self.preview_graphicsview.zoomFitWidth()
+        self.current_graphicsview.zoomFitWidth()
 
     def closeEvent(self, ev):
         debug('closeEvent in LibraryView')
         self.saveDocumentViewStatus(self.filename)
-        self.preview_graphicsview.close()
+        self.doc_graphicsview_1.close()
+        self.doc_graphicsview_2.close()
         self.thumb_graphicsview.close()
 
     def loadDocumentViewStatus(self, filename):
@@ -337,15 +366,20 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
             return None
 
     def saveDocumentViewStatus(self, filename):
-        # debug(self.preview_graphicsview.current_filename, filename)
         if filename is None or not os.path.exists(filename):
             return
             
-        assert(self.preview_graphicsview.current_filename == filename)
-        mainViewStatus = self.preview_graphicsview.getViewStatus()
+        assert(self.doc_graphicsview_1.current_filename == filename)
+        docViewStatus1 = self.doc_graphicsview_1.getViewStatus()
+        docViewStatus2 = self.doc_graphicsview_2.getViewStatus()
         thumbViewStatus = self.thumb_graphicsview.getViewStatus()
+        splitterState = self.splitter_doc.saveState()
+        # https://stackoverflow.com/questions/44257184/pyqt5-save-qbytearray-to-json-format
+        splitterState = bytes(splitterState.toHex()).decode('utf-8')
         outDict = {
-            "mainView": mainViewStatus,
+            "docView1": docViewStatus1,
+            "docView2": docViewStatus2,
+            'docSplitter': splitterState,
             "thumbView": thumbViewStatus
         }
         dataFileName = self.app_data_path + os.sep + filename.replace(os.sep, '_') + '.json'

@@ -153,7 +153,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
     def openRecentFile(self):
         action = self.sender()
         index = self.recent_files_actions.index(action)
-        self.loadPDFfile(self.recent_files[index])
+        filename = os.path.expanduser(self.recent_files[index])
+        self.loadPDFfile(filename)
 
     def clearRecents(self):
         self.recent_files_actions[:] = []
@@ -174,8 +175,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
 
     def loadPDFfile(self, filename):
         """ Loads pdf document in all threads """
-        filename = os.path.expanduser(filename)
-        
+        if not os.path.exists(filename):
+            return
+
         # widget = DocumentView(self.centraltabwidget, filename, self.screen_dpi)
         # widget.showStatusRequested.connect(self.showStatus)
         # self.centraltabwidget.addTab(widget, filename)
@@ -316,10 +318,12 @@ def main():
     win.show()
 
     if len(sys.argv)>1 and os.path.exists(os.path.abspath(sys.argv[-1])):
-        win.loadPDFfile(os.path.abspath(sys.argv[-1]))
+        filename = os.path.expanduser(os.path.abspath(sys.argv[-1]))
+        win.loadPDFfile(filename)
     else:
-        if len(win.recent_files) > 0 and os.path.exists(win.recent_files[0]):
-            win.loadPDFfile(win.recent_files[0]) # load the latest one
+        if len(win.recent_files) > 0:
+            filename = os.path.expanduser(win.recent_files[0]) # load the latest one
+            win.loadPDFfile(filename)
             
     app.aboutToQuit.connect(win.onAppQuit)
     sys.exit(app.exec_())

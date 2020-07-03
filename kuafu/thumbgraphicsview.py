@@ -9,7 +9,7 @@ class ThumbGraphicsView(BaseDocGraphicsView):
     pageRelocationRequest = QtCore.pyqtSignal(int, float, float)
     zoomRequest = QtCore.pyqtSignal(bool, int, float, float)
 
-    def __init__(self, parent, render_num=2):
+    def __init__(self, parent, render_num=4):
         super(ThumbGraphicsView, self).__init__(parent, render_num)
 
         self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.white)) # set background
@@ -79,6 +79,8 @@ class ThumbGraphicsView(BaseDocGraphicsView):
 
     def wheelEvent(self, ev):
         # debug("wheelEvent in ThumbGraphicsView")
+        self.setFocus()
+        # 
         modifiers = QtWidgets.QApplication.keyboardModifiers()
         if modifiers == QtCore.Qt.ControlModifier:
             page_no, x_ratio, y_ratio, _, _ = self.getPageByPos(ev.pos().x(), ev.pos().y())

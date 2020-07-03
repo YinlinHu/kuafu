@@ -1,18 +1,18 @@
 from PyQt5 import QtCore
 from PyQt5 import QtGui
 
+import tempfile
+
 # https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
 # MuPDF is much faster at rendering, but slower at loading (get_page_sizes()) and also use more memories
 # 
-# PyMuPDF will freeze when zoom at 1600% for some files
+# PyMuPDF will freeze when zoom at 1600% for some files 
 # PyMuPDF will fail in opening some files
 BACKEND_MuPDF = False
 
-if BACKEND_MuPDF:
-    import fitz
-    from popplerqt5 import Poppler # use poppler to load page sizes
-else: 
-    from popplerqt5 import Poppler
+# import fitz # PyMuPDF
+from popplerqt5 import Poppler
+import redstork # PDFium
 
 from multiprocessing import Process
 
@@ -59,6 +59,9 @@ class PdfRender(Process):
                 | Poppler.Document.Antialiasing
                 )
 
+            # 
+            self.doc_redstork = redstork.Document(self.filename)
+
     def get_page_sizes_mupdf(self, doc):
         pages_size_inch = []
         page_counts = len(doc)
@@ -73,8 +76,19 @@ class PdfRender(Process):
         pages_size_inch = []
         page_counts = doc.numPages()  
         for i in range(page_counts):
-            pg_width = doc.page(i).pageSizeF().width() / 72.0 # width in inch
-            pg_height = doc.page(i).pageSizeF().height() / 72.0
+            pageSz = doc.page(i).pageSizeF()
+            pg_width = pageSz.width() / 72.0 # width in inch
+            pg_height = pageSz.height() / 72.0
+            pages_size_inch.append([pg_width, pg_height])  
+        return pages_size_inch
+
+    def get_page_sizes_redstork(self, doc):
+        pages_size_inch = []
+        page_counts = len(doc) 
+        for i in range(page_counts):
+            page = doc[i]
+            pg_width = page.width / 72.0 # width in inch
+            pg_height = page.height / 72.0
             pages_size_inch.append([pg_width, pg_height])  
         return pages_size_inch
 
@@ -224,12 +238,115 @@ class PdfRender(Process):
                 # not supported command
                 assert(0)
 
+    def render_mupdf(self, doc, page_no, dpi, roi):
+        page = doc.loadPage(page_no)
+        page_rect = page.MediaBox
+        # 
+        zoom_ratio = dpi / 72.0
+        x1 = roi.x() / zoom_ratio
+        y1 = roi.y() / zoom_ratio
+        x2 = (roi.x() + roi.width()) / zoom_ratio 
+        y2 = (roi.y() + roi.height()) / zoom_ratio
+        # 
+        x1 = min(max(x1, 0), page_rect.width)
+        y1 = min(max(y1, 0), page_rect.height)
+        x2 = min(max(x2, 0), page_rect.width)
+        y2 = min(max(y2, 0), page_rect.height)
+        clip = fitz.Rect(x1, y1, x2, y2)
+        # debug("Render (MuPDF) In: ", zoom_ratio, clip)
+        pix = page.getPixmap(matrix=fitz.Matrix(zoom_ratio, zoom_ratio), colorspace='RGB', clip=clip, alpha=False)
+        # set the correct QImage format depending on alpha
+        fmt = QtGui.QImage.Format_RGBA8888 if pix.alpha else QtGui.QImage.Format_RGB888
+        img = QtGui.QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
+        # debug("Render (MuPDF) Out: ", img.width(), img.height())
+        # 
+        roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
+
+        return img, roi
+
+    def render_poppler(self, doc, page_no, dpi, roi):
+        page = doc.page(page_no)
+        pageSz = page.pageSizeF()
+        pg_width_pix = dpi * (pageSz.width() / 72.0) # DPI * width in inch
+        pg_height_pix = dpi * (pageSz.height() / 72.0)
+        x1 = roi.x()
+        y1 = roi.y()
+        x2 = x1 + roi.width()
+        y2 = y1 + roi.height()
+        # 
+        x1 = min(max(x1, 0), pg_width_pix)
+        y1 = min(max(y1, 0), pg_height_pix)
+        x2 = min(max(x2, 0), pg_width_pix)
+        y2 = min(max(y2, 0), pg_height_pix)
+        # debug("Render (Poppler) In: ", x1, y1, x2 - x1, y2 - y1)
+        img = page.renderToImage(dpi, dpi, x1, y1, x2 - x1, y2 - y1)
+        # debug("Render (Poppler) Out: ", img.width(), img.height())
+        # 
+        roi.setCoords(x1, y1, x2, y2) # write back roi
+
+        # # Add Heighlight over Link Annotation
+        # self.painter.begin(img)
+        # annots = page.annotations()
+        # for annot in annots:
+        #     # if annot.subType() == Poppler.Annotation.ALink:
+        #     x, y = annot.boundary().left()*img.width(), annot.boundary().top()*img.height()
+        #     w, h = annot.boundary().width()*img.width()+1, annot.boundary().height()*img.height()+1
+        #     self.painter.fillRect(x, y, w, h, self.link_color)
+        # self.painter.end()
+        return img, roi
+
+    def render_redstork(self, doc, page_no, dpi, roi):
+        page = doc[page_no]
+        # 
+        zoom_ratio = dpi / 72.0
+        x1 = roi.x() / zoom_ratio
+        y1 = roi.y() / zoom_ratio
+        x2 = (roi.x() + roi.width()) / zoom_ratio 
+        y2 = (roi.y() + roi.height()) / zoom_ratio
+        # 
+        x1 = min(max(x1, 0), page.width)
+        y1 = min(max(y1, 0), page.height)
+        x2 = min(max(x2, 0), page.width)
+        y2 = min(max(y2, 0), page.height)
+        # 
+        # change to coordinate of PDF (the Y direction is opposite)
+        dx = page.crop_box[0]
+        dy = -page.crop_box[1] # negtive
+        rect = [
+            x1 + dx, 
+            page.height - (y2 + dy), 
+            x2 + dx, 
+            page.height - (y1 + dy)
+        ]
+        # 
+        # debug("Render (redstork) In: ", zoom_ratio)
+        tmpImgFile = tempfile.NamedTemporaryFile(delete=True, suffix=('_%d.ppm' % self.pid))
+        # debug("Temp file name: ", tmpImgFile.name)
+        page.render(tmpImgFile.name, zoom_ratio, rect)
+        img = QtGui.QImage(tmpImgFile.name)
+        tmpImgFile.close()
+        # debug("Render (redstork) Out: ", img.width(), img.height())
+        # 
+        roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
+
+        return img, roi
+
+    def render(self, page_no, dpi, roi):
+        return self.render_redstork(self.doc_redstork, page_no, dpi, roi)
+        if BACKEND_MuPDF:
+            try:
+                img, roi = self.render_mupdf(self.doc, page_no, dpi, roi)
+            except:
+                img, roi = self.render_poppler(self.doc_poppler, page_no, dpi, roi)
+            return img, roi
+        else:
+            return self.render_poppler(self.doc, page_no, dpi, roi)
+
     def run(self):
         """ render(int, float)
         This slot takes page no. and dpi and renders that page, then emits a signal with QImage"""
 
         debug('render entered.')
-        print(self.pid)
 
         while self.exit_flag == False:
             QtCore.QThread.msleep(20)
@@ -248,66 +365,9 @@ class PdfRender(Process):
                 continue
             
             page_no, dpi, roi = command
+
+            img, roi = self.render(page_no, dpi, roi)
             
-            if BACKEND_MuPDF:
-                page = self.doc.loadPage(page_no)
-            else:
-                page = self.doc.page(page_no)
-
-            if page is None:
-                continue
-
-            # debug('rendering page %d.' % (page_no))
-            if BACKEND_MuPDF:
-                page_rect = page.MediaBox
-                # 
-                zoom_ratio = dpi / 72.0
-                x1 = roi.x() / zoom_ratio
-                y1 = roi.y() / zoom_ratio
-                x2 = (roi.x() + roi.width()) / zoom_ratio 
-                y2 = (roi.y() + roi.height()) / zoom_ratio
-                # 
-                x1 = min(max(x1, 0), page_rect.width)
-                y1 = min(max(y1, 0), page_rect.height)
-                x2 = min(max(x2, 0), page_rect.width)
-                y2 = min(max(y2, 0), page_rect.height)
-                clip = fitz.Rect(x1, y1, x2, y2)
-                # debug("Render In: ", zoom_ratio, clip)
-                pix = page.getPixmap(matrix=fitz.Matrix(zoom_ratio, zoom_ratio), clip=clip, alpha=False)
-                # set the correct QImage format depending on alpha
-                fmt = QtGui.QImage.Format_RGBA8888 if pix.alpha else QtGui.QImage.Format_RGB888
-                img = QtGui.QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
-                # debug("Render Out: ", img.width(), img.height())
-                # 
-                roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
-            else:
-                pg_width_pix = dpi * (page.pageSizeF().width() / 72.0) # DPI * width in inch
-                pg_height_pix = dpi * (page.pageSizeF().height() / 72.0)
-                x1 = roi.x()
-                y1 = roi.y()
-                x2 = x1 + roi.width()
-                y2 = y1 + roi.height()
-                # 
-                x1 = min(max(x1, 0), pg_width_pix)
-                y1 = min(max(y1, 0), pg_height_pix)
-                x2 = min(max(x2, 0), pg_width_pix)
-                y2 = min(max(y2, 0), pg_height_pix)
-                img = page.renderToImage(dpi, dpi, x1, y1, x2 - x1, y2 - y1)
-                # 
-                roi.setCoords(x1, y1, x2, y2) # write back roi
-            
-            # # Add Heighlight over Link Annotation
-            # self.painter.begin(img)
-            # annots = page.annotations()
-            # for annot in annots:
-            #     # if annot.subType() == Poppler.Annotation.ALink:
-            #     x, y = annot.boundary().left()*img.width(), annot.boundary().top()*img.height()
-            #     w, h = annot.boundary().width()*img.width()+1, annot.boundary().height()*img.height()+1
-            #     self.painter.fillRect(x, y, w, h, self.link_color)
-            # self.painter.end()
-            # 
-            # self.rendered.emit(self.filename, page_no, dpi, img)
-
             # QImage to QByteArray
             img_byte_array = QtCore.QByteArray()
             img_buffer = QtCore.QBuffer(img_byte_array)

@@ -34,7 +34,7 @@
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
      </property>
-     <widget class="QWidget" name="widget" native="true">
+     <widget class="QWidget" name="widget_file" native="true">
       <property name="maximumSize">
        <size>
         <width>600</width>
@@ -129,7 +129,7 @@
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="widget" native="true">
+     <widget class="QWidget" name="widget_doc" native="true">
       <layout class="QVBoxLayout" name="verticalLayout_2">
        <property name="spacing">
         <number>0</number>
@@ -509,11 +509,17 @@
         </layout>
        </item>
        <item>
-        <widget class="DocGraphicsView" name="preview_graphicsview"/>
+        <widget class="QSplitter" name="splitter_doc">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <widget class="DocGraphicsView" name="doc_graphicsview_1"/>
+         <widget class="DocGraphicsView" name="doc_graphicsview_2"/>
+        </widget>
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="widget" native="true">
+     <widget class="QWidget" name="widget_thumb" native="true">
       <property name="minimumSize">
        <size>
         <width>150</width>

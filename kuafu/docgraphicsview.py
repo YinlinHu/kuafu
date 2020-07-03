@@ -5,13 +5,15 @@ from PyQt5 import QtGui
 from basedocgraphicsview import BaseDocGraphicsView
 
 class DocGraphicsView(BaseDocGraphicsView):
-    def __init__(self, parent, render_num=2):
+    def __init__(self, parent, render_num=4):
         super(DocGraphicsView, self).__init__(parent, render_num)
 
         self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.white)) # set background
 
     def wheelEvent(self, ev):
         # debug("wheelEvent in BaseDocGraphicsView")
+        self.setFocus()
+        # 
         modifiers = QtWidgets.QApplication.keyboardModifiers()
         if modifiers == QtCore.Qt.ControlModifier:
             delta = ev.angleDelta()
