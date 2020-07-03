@@ -19,6 +19,9 @@ from multiprocessing import Process
 from utils import debug
 import time
 
+import cv2
+import numpy as np
+
 class PdfRender(Process):
 
     # considering realtime, the request may be dropped
@@ -320,11 +323,19 @@ class PdfRender(Process):
         ]
         # 
         # debug("Render (redstork) In: ", zoom_ratio)
-        tmpImgFile = tempfile.NamedTemporaryFile(delete=True, suffix=('_%d.ppm' % self.pid))
-        # debug("Temp file name: ", tmpImgFile.name)
-        page.render(tmpImgFile.name, zoom_ratio, rect)
-        img = QtGui.QImage(tmpImgFile.name)
-        tmpImgFile.close()
+        if True:
+            buf, w, h = page.render_to_buffer(zoom_ratio, rect)
+            stride = w * 4
+            cvImg = np.frombuffer(buf, dtype=np.uint8)
+            cvImg = cvImg.reshape(h, w, 4)
+            cvImg = cv2.cvtColor(cvImg, cv2.COLOR_BGRA2RGBA)
+            img = QtGui.QImage(cvImg.data, w, h, stride, QtGui.QImage.Format_RGBA8888)
+        else:
+            tmpImgFile = tempfile.NamedTemporaryFile(delete=True, suffix=('_%d.ppm' % self.pid))
+            # debug("Temp file name: ", tmpImgFile.name)
+            page.render(tmpImgFile.name, zoom_ratio, rect)
+            img = QtGui.QImage(tmpImgFile.name)
+            tmpImgFile.close()
         # debug("Render (redstork) Out: ", img.width(), img.height())
         # 
         roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
