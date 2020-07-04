@@ -33,6 +33,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.screen_dpi = screen_dpi
         self.app_data_path = app_data_path
         self.filename = None
+        self.viewStatus = None
 
         self.splitter_doc.setSizes([1, 0]) # the second view is folded by default
         self.splitter_doc.setCollapsible(0, False) 
@@ -58,7 +59,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.doc_graphicsview_1.viewportChanged.connect(self.onDocViewportChanged)
         self.doc_graphicsview_1.focusIn.connect(self.OnDoc1FocusIn)
 
-        self.doc_graphicsview_2.loadFinished.connect(self.onDoc1LoadFinished)
+        # self.doc_graphicsview_2.loadFinished.connect(self.onDoc2LoadFinished)
         self.doc_graphicsview_2.viewColumnChanged.connect(self.onViewColumnChanged)
         self.doc_graphicsview_2.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
         self.doc_graphicsview_2.zoomRatioChanged.connect(self.onZoomRatioChanged)
@@ -155,19 +156,10 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.fileReselected.emit(self.filename)
                 
     def loadDocument(self, filename, screen_dpi):
-        viewStatus = self.loadDocumentViewStatus(filename)
-        status = viewStatus['docView1'] if viewStatus else None
+        self.viewStatus = self.loadDocumentViewStatus(filename)
+        # 
+        status = self.viewStatus['docView1'] if self.viewStatus else None
         self.doc_graphicsview_1.setDocument(filename, screen_dpi, status)
-        status = viewStatus['docView2'] if viewStatus else None
-        self.doc_graphicsview_2.setDocument(filename, screen_dpi, status)
-        status = viewStatus['thumbView'] if viewStatus else None
-        self.thumb_graphicsview.setDocument(filename, screen_dpi, status)
-        status = viewStatus['docSplitter'] if viewStatus else None
-        if status:
-            status = QtCore.QByteArray.fromHex(bytes(status, 'utf-8'))
-            self.splitter_doc.restoreState(status)
-        else:
-            self.splitter_doc.setSizes([1, 0]) # the second view is folded by default
 
     def onTocLoaded(self, toc):
         self.tocManager.setToc(toc)
@@ -177,10 +169,19 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         debug("onTocIndexChanged: %d" % page_no)
         self.current_graphicsview.gotoPage(page_no)
 
-    def onDoc1LoadFinished(self):
+    def onDoc1LoadFinished(self, pagesInfo):
         # debug("onDoc1LoadFinished")
-        # self.thumb_graphicsview.setDocument(self.filename, self.screen_dpi)
-        pass
+        # 
+        status = self.viewStatus['docView2'] if self.viewStatus else None
+        self.doc_graphicsview_2.setDocument(self.filename, self.screen_dpi, status, pagesInfo)
+        status = self.viewStatus['thumbView'] if self.viewStatus else None
+        self.thumb_graphicsview.setDocument(self.filename, self.screen_dpi, status, pagesInfo)
+        status = self.viewStatus['docSplitter'] if self.viewStatus else None
+        if status:
+            status = QtCore.QByteArray.fromHex(bytes(status, 'utf-8'))
+            self.splitter_doc.restoreState(status)
+        else:
+            self.splitter_doc.setSizes([1, 0]) # the second view is folded by default
 
     def onThumbLoadFinished(self):
         # debug("onThumbLoadFinished")

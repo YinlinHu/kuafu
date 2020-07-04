@@ -14,7 +14,7 @@ import time
 import numpy as np
 
 class BaseDocGraphicsView(QtWidgets.QGraphicsView):
-    loadFinished = QtCore.pyqtSignal()
+    loadFinished = QtCore.pyqtSignal(list)
     tocLoaded = QtCore.pyqtSignal(list)
     viewportChanged = QtCore.pyqtSignal(str, int, dict)
     zoomRatioChanged = QtCore.pyqtSignal(float)
@@ -127,7 +127,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         }
         return viewStatus
 
-    def setDocument(self, filename, screen_dpi, viewStatus=None):
+    def setDocument(self, filename, screen_dpi, viewStatus=None, pagesInfo=None):
         # clear information
         self.scene.clear()
         self.page_items = []
@@ -162,15 +162,16 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         for rd in self.render_list:
             rd.commandQ.put(['SET', [self.current_filename]])
 
-        # query page size using the first worker
-        self.render_list[0].commandQ.put(['PAGESIZES', [None]])
+        if pagesInfo:
+            self.onPageSizesReceived(pagesInfo)
+        else:
+            # query page size using the first worker
+            self.render_list[0].commandQ.put(['PAGESIZES', [None]])
 
         # query Toc using the first worker
         self.render_list[0].commandQ.put(['TOC', [None]])
 
     def onPageSizesReceived(self, pages_size_inch):
-        debug("%d Page Sizes Received" % len(pages_size_inch))
-
         # time_0 = time.time()
         self.page_counts = len(pages_size_inch)
         self.pages_size_inch = pages_size_inch
@@ -185,13 +186,8 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         # 
         self.redrawPages(self.relocationInitInfo)
         # 
-        self.viewColumnChanged.emit(self.view_column_count)
-        self.emptyLeadingPageChanged.emit(self.leading_empty_pages)
-        if self.fitwidth_flag:
-            self.zoomRatioChanged.emit(0)
-        else:
-            self.zoomRatioChanged.emit(self.zoom_levels[self.current_zoom_index])
-        self.loadFinished.emit()
+        self.refreshSignals()
+        self.loadFinished.emit(self.pages_size_inch)
 
     def onViewportChanged(self):
         self.renderCurrentVisiblePages()
@@ -317,16 +313,16 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
                 self.renderRequest(page_no, dpi, roi, render_idx, self.current_visible_regions)
 
-                debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %.1f %.1f %.1f %.1f> <roi: %.1f %.1f %.1f %.1f>" % (
-                    render_idx, page_no, dpi, 
-                    roi_raw.left(), roi_raw.top(), roi_raw.width(), roi_raw.height(), 
-                    roi.left(), roi.top(), roi.width(), roi.height()
-                    ))
+                # debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %.1f %.1f %.1f %.1f> <roi: %.1f %.1f %.1f %.1f>" % (
+                #     render_idx, page_no, dpi, 
+                #     roi_raw.left(), roi_raw.top(), roi_raw.width(), roi_raw.height(), 
+                #     roi.left(), roi.top(), roi.width(), roi.height()
+                #     ))
 
     def handleSingleRenderedImage(self, render_idx, filename, page_no, dpi, roi, img_byte_array):
-        debug("-> Rendering %d Completed : <page:%d> <dpi:%.2f> <roi: %.1f %.1f %.1f %.1f>" % (
-            render_idx, page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
-        ))
+        # debug("-> Rendering %d Completed : <page:%d> <dpi:%.2f> <roi: %.1f %.1f %.1f %.1f>" % (
+        #     render_idx, page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
+        # ))
 
         # if page_no not in self.current_visible_regions:
         #     debug("become unvisible: %d. skipping" % page_no)
@@ -396,6 +392,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
                 # 
                 if message == 'PAGESIZES_RES':
                     pages_size_inch = item[2]
+                    debug("%d Page Sizes Received" % len(pages_size_inch))
                     self.onPageSizesReceived(pages_size_inch)
                 if message == 'TOC_RES':
                     toc = item[2]

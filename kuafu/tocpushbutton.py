@@ -52,7 +52,7 @@ class TocPushButton(QtWidgets.QPushButton):
     def constructTitleText(self, title_list, cutLength=10000):
         title_str = ""
         for title in title_list:
-            title_str += " ⯈ "
+            title_str += " > "
             tmpStr = title[:cutLength]
             if len(title) > cutLength:
                 tmpStr += " ..."
@@ -82,5 +82,5 @@ class TocPushButton(QtWidgets.QPushButton):
 
     def clearTitleText(self):
         self.title_list = []
-        self.setText(" ⯈ ")
+        self.setText(" > ")
         self.setStyleSheet("text-align:left")
