@@ -61,7 +61,6 @@ class PdfRender(Process):
                 | Poppler.Document.TextHinting
                 | Poppler.Document.Antialiasing
                 )
-
             # 
             self.doc_redstork = redstork.Document(self.filename)
 
@@ -88,15 +87,27 @@ class PdfRender(Process):
     def get_page_sizes_redstork(self, doc):
         pages_size_inch = []
         page_counts = len(doc) 
-        for i in range(page_counts):
-            page = doc[i]
-            pg_width = page.width / 72.0 # width in inch
-            pg_height = page.height / 72.0
-            pages_size_inch.append([pg_width, pg_height])  
+        if True:
+            # faster, get page sizes without loading each page
+            allPagesSize = doc.get_all_pages_size()
+            assert(len(allPagesSize) == page_counts)
+            for i in range(page_counts):
+                pg_width = allPagesSize[i][0] / 72.0 # width in inch
+                pg_height = allPagesSize[i][1] / 72.0
+                pages_size_inch.append([pg_width, pg_height])
+        else:
+            # much slower, loading each page before getting size
+            for i in range(page_counts):
+                page = doc[i]
+                pg_width = page.width / 72.0 # width in inch
+                pg_height = page.height / 72.0
+                pages_size_inch.append([pg_width, pg_height])  
         return pages_size_inch
 
     def get_page_sizes(self):
         # extract page sizes for all pages
+        return self.get_page_sizes_redstork(self.doc_redstork)
+        # 
         if BACKEND_MuPDF:
             # return self.get_page_sizes_mupdf(self.doc)
             return self.get_page_sizes_poppler(self.doc_poppler)
@@ -328,6 +339,7 @@ class PdfRender(Process):
         ]
         # 
         # debug("Render (redstork) In: ", zoom_ratio)
+        # time_0 = time.time()
         if True:
             buf, w, h = page.render_to_buffer(zoom_ratio, rect)
             stride = w * 4
@@ -342,7 +354,9 @@ class PdfRender(Process):
             img = QtGui.QImage(tmpImgFile.name)
             tmpImgFile.close()
         # debug("Render (redstork) Out: ", img.width(), img.height())
-        # 
+        # time_a = time.time()
+        # debug("render time ", time_a - time_0)
+
         roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
 
         return img, roi
