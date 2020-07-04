@@ -156,9 +156,10 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.fileReselected.emit(self.filename)
                 
     def loadDocument(self, filename, screen_dpi):
-        self.viewStatus = self.loadDocumentViewStatus(filename)
+        viewStatus = self.loadDocumentViewStatus(filename)
+        self.viewStatus = [viewStatus, filename]
         # 
-        status = self.viewStatus['docView1'] if self.viewStatus else None
+        status = viewStatus['docView1'] if viewStatus else None
         self.doc_graphicsview_1.setDocument(filename, screen_dpi, status)
 
     def onTocLoaded(self, toc):
@@ -172,11 +173,14 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     def onDoc1LoadFinished(self, pagesInfo):
         # debug("onDoc1LoadFinished")
         # 
-        status = self.viewStatus['docView2'] if self.viewStatus else None
+        viewStatus, filename = self.viewStatus
+        if filename != self.filename:
+            return
+        status = viewStatus['docView2'] if viewStatus else None
         self.doc_graphicsview_2.setDocument(self.filename, self.screen_dpi, status, pagesInfo)
-        status = self.viewStatus['thumbView'] if self.viewStatus else None
+        status = viewStatus['thumbView'] if viewStatus else None
         self.thumb_graphicsview.setDocument(self.filename, self.screen_dpi, status, pagesInfo)
-        status = self.viewStatus['docSplitter'] if self.viewStatus else None
+        status = viewStatus['docSplitter'] if viewStatus else None
         if status:
             status = QtCore.QByteArray.fromHex(bytes(status, 'utf-8'))
             self.splitter_doc.restoreState(status)
@@ -369,8 +373,15 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     def saveDocumentViewStatus(self, filename):
         if filename is None or not os.path.exists(filename):
             return
-            
-        assert(self.doc_graphicsview_1.current_filename == filename)
+
+        if self.doc_graphicsview_1.current_filename != filename:
+            return
+        if self.doc_graphicsview_2.current_filename != filename:
+            return
+        if self.thumb_graphicsview.current_filename != filename:
+            return
+
+        # only valid when all views have been correctly initialized
         docViewStatus1 = self.doc_graphicsview_1.getViewStatus()
         docViewStatus2 = self.doc_graphicsview_2.getViewStatus()
         thumbViewStatus = self.thumb_graphicsview.getViewStatus()

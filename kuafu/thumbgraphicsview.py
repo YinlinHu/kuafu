@@ -9,19 +9,19 @@ class ThumbGraphicsView(BaseDocGraphicsView):
     pageRelocationRequest = QtCore.pyqtSignal(int, float, float)
     zoomRequest = QtCore.pyqtSignal(bool, int, float, float)
 
-    def __init__(self, parent, render_num=2):
+    def __init__(self, parent, render_num=1):
         super(ThumbGraphicsView, self).__init__(parent, render_num)
 
         self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.white)) # set background
 
         self.setDragMode(QtWidgets.QGraphicsView.NoDrag) # disable the default dragger
 
-    def onPageSizesReceived(self, pages_size_inch):
-        super(ThumbGraphicsView, self).onPageSizesReceived(pages_size_inch) # call parent's implementation
-        # add some more
-        for i in range(self.page_counts):
-            tipStr = ("Page %d" % (i+1))
-            self.page_items[i].setToolTip(tipStr)
+    # def onPageSizesReceived(self, pages_size_inch):
+    #     super(ThumbGraphicsView, self).onPageSizesReceived(pages_size_inch) # call parent's implementation
+    #     # add some more
+    #     for i in range(self.page_counts):
+    #         tipStr = ("Page %d" % (i+1))
+    #         self.page_items[i].setToolTip(tipStr)
             
     def highlightVisibleMasks(self, filename, visible_regions):
         # the items in visible_regions are in normalized coordinates
@@ -33,10 +33,12 @@ class ThumbGraphicsView(BaseDocGraphicsView):
         # 
         # remove current highlighted first
         for pg_no in self.current_highlighted_pages:
-            self.page_items[pg_no].setMask(0, 0, 0, 0)
+            if self.page_items[pg_no]:
+                self.page_items[pg_no].setMask(0, 0, 0, 0)
         self.current_highlighted_pages = []
         # remove border of the page that is marked as the current
-        self.page_items[self.pageMarkedAsCurrent].setBorderHighlight(False)
+        if self.page_items[self.pageMarkedAsCurrent]:
+            self.page_items[self.pageMarkedAsCurrent].setBorderHighlight(False)
 
         currentPageIdx = next(iter(visible_regions)) # first key as the current
         for pg_no in visible_regions:

@@ -176,10 +176,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.page_counts = len(pages_size_inch)
         self.pages_size_inch = pages_size_inch
 
-        for i in range(self.page_counts):
-            pageItem = PageGraphicsItem(i)
-            self.scene.addItem(pageItem)
-            self.page_items.append(pageItem)
+        self.page_items = [None] * self.page_counts
 
         self.setColumnNumber(min(self.view_column_count, self.page_counts))
         self.load_finished_flag = True
@@ -267,6 +264,11 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.render_list[render_idx].commandQ.put(['RENDER', [page_no, dpi, roi, visible_regions]])
 
     def initializePage(self, page_no):
+        if self.page_items[page_no] is None:
+            pageItem = PageGraphicsItem(page_no)
+            self.scene.addItem(pageItem)
+            self.page_items[page_no] = pageItem
+        # 
         if not self.current_pages_rect[page_no][0]:
             _, x, y, w, h = self.current_pages_rect[page_no]
             self.page_items[page_no].initialize(x, y, w, h)
@@ -313,16 +315,16 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
                 self.renderRequest(page_no, dpi, roi, render_idx, self.current_visible_regions)
 
-                # debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %.1f %.1f %.1f %.1f> <roi: %.1f %.1f %.1f %.1f>" % (
-                #     render_idx, page_no, dpi, 
-                #     roi_raw.left(), roi_raw.top(), roi_raw.width(), roi_raw.height(), 
-                #     roi.left(), roi.top(), roi.width(), roi.height()
-                #     ))
+                debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %.1f %.1f %.1f %.1f> <roi: %.1f %.1f %.1f %.1f>" % (
+                    render_idx, page_no, dpi, 
+                    roi_raw.left(), roi_raw.top(), roi_raw.width(), roi_raw.height(), 
+                    roi.left(), roi.top(), roi.width(), roi.height()
+                    ))
 
     def handleSingleRenderedImage(self, render_idx, filename, page_no, dpi, roi, img_byte_array):
-        # debug("-> Rendering %d Completed : <page:%d> <dpi:%.2f> <roi: %.1f %.1f %.1f %.1f>" % (
-        #     render_idx, page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
-        # ))
+        debug("-> Rendering %d Completed : <page:%d> <dpi:%.2f> <roi: %.1f %.1f %.1f %.1f>" % (
+            render_idx, page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
+        ))
 
         # if page_no not in self.current_visible_regions:
         #     debug("become unvisible: %d. skipping" % page_no)
@@ -446,7 +448,8 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
             self.current_pages_rect.append([False, startx, starty, pages_width_pix[row][col], pages_height_pix[row][col]])
             
             # make all pages invisible first
-            self.page_items[i].setVisible(False)
+            if self.page_items[i]:
+                self.page_items[i].setVisible(False)
 
         sceneWidthFix = colWidths.sum() + (self.view_column_count + 1) * self.horispacing
         sceneHeightFix = rowHeights.sum() + (rowNum + 1) * self.vertspacing

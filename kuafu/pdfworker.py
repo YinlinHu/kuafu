@@ -226,17 +226,22 @@ class PdfRender(Process):
             if command == 'SET':
                 filename = params[0]
                 self.set_document(filename)
+                # debug('[SET] for ', self.filename)
             elif command == 'PAGESIZES':
                 pages_size_inch = self.get_page_sizes()
                 self.resultsQ.put(['PAGESIZES_RES', self.filename, pages_size_inch])
+                # debug('[PAGESIZES] for ', self.filename)
             elif command == 'TOC':
                 toc = self.getTableOfContents()
                 self.resultsQ.put(['TOC_RES', self.filename, toc])
+                # debug('[TOC] for ', self.filename)
             elif command == 'RENDER':
                 page_no, dpi, roi, visible_regions =params
                 self.save_rendering_command(page_no, dpi, roi, visible_regions)
+                # debug('[RENDER] for ', self.filename)
             elif command == 'STOP':
                 self.exit_flag = True
+                # debug('[STOP] for ', self.filename)
             else:
                 # not supported command
                 assert(0)
