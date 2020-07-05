@@ -177,6 +177,11 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.pages_size_inch = pages_size_inch
 
         self.page_items = [None] * self.page_counts
+        # # init only when needed
+        # for i in range(self.page_counts):
+        #     pageItem = PageGraphicsItem(i)
+        #     self.scene.addItem(pageItem)
+        #     self.page_items[i] = pageItem
 
         self.setColumnNumber(min(self.view_column_count, self.page_counts))
         self.load_finished_flag = True
@@ -333,14 +338,14 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         if page_no in self.rendered_info \
            and self.rendered_info[page_no][0] == dpi \
            and roi in self.rendered_info[page_no][1]:
-            # debug("duplicated rendering. skipping")
+            debug("duplicated rendering. skipping")
             return
 
         if len(self.current_rendering_dpi) == 0:
             return
         # too late, the current rendering dpi is already changed
         if dpi != self.current_rendering_dpi[page_no]:
-            # debug("unmatched DPI: %.2f -> %.2f. skipping" % (dpi, self.current_rendering_dpi[page_no]))
+            debug("unmatched DPI: %.2f -> %.2f. skipping" % (dpi, self.current_rendering_dpi[page_no]))
             return
             
         # QByteArray to QImage

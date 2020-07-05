@@ -5,3 +5,5 @@ include kuafu/resources/ui_annotation_item.py
 include kuafu/resources/ui_document.py
 include kuafu/resources/ui_library.py
 include kuafu/resources/ui_main.py
+include kuafu/lib/pdfium
+include kuafu/pdfium_version.txt

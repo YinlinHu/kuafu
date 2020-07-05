@@ -12,7 +12,11 @@ BACKEND_MuPDF = False
 
 # import fitz # PyMuPDF
 from popplerqt5 import Poppler
-import redstork # PDFium
+
+# follow https://github.com/BlockSigner/wowpng
+import ctypes
+import pdfium as PDFIUM
+PDFIUM.FPDF_InitLibraryWithConfig(PDFIUM.FPDF_LIBRARY_CONFIG(2, None, None, 0))
 
 from multiprocessing import Process
 
@@ -61,8 +65,8 @@ class PdfRender(Process):
                 | Poppler.Document.TextHinting
                 | Poppler.Document.Antialiasing
                 )
-            # 
-            self.doc_redstork = redstork.Document(self.filename)
+        # 
+        self.doc_pdfium = PDFIUM.FPDF_LoadDocument(self.filename, None)
 
     def get_page_sizes_mupdf(self, doc):
         pages_size_inch = []
@@ -84,29 +88,21 @@ class PdfRender(Process):
             pages_size_inch.append([pg_width, pg_height])  
         return pages_size_inch
 
-    def get_page_sizes_redstork(self, doc):
+    def get_page_sizes_pdfium(self, doc):
         pages_size_inch = []
-        page_counts = len(doc) 
-        if True:
-            # faster, get page sizes without loading each page
-            allPagesSize = doc.get_all_pages_size()
-            assert(len(allPagesSize) == page_counts)
-            for i in range(page_counts):
-                pg_width = allPagesSize[i][0] / 72.0 # width in inch
-                pg_height = allPagesSize[i][1] / 72.0
-                pages_size_inch.append([pg_width, pg_height])
-        else:
-            # much slower, loading each page before getting size
-            for i in range(page_counts):
-                page = doc[i]
-                pg_width = page.width / 72.0 # width in inch
-                pg_height = page.height / 72.0
-                pages_size_inch.append([pg_width, pg_height])  
+        page_counts = PDFIUM.FPDF_GetPageCount(doc)
+        width = ctypes.c_double()
+        height = ctypes.c_double()
+        for i in range(page_counts):
+            PDFIUM.FPDF_GetPageSizeByIndex(doc, i, ctypes.byref(width), ctypes.byref(height))
+            pg_width = width.value / 72.0 # width in inch
+            pg_height = height.value / 72.0
+            pages_size_inch.append([pg_width, pg_height])
         return pages_size_inch
 
     def get_page_sizes(self):
         # extract page sizes for all pages
-        return self.get_page_sizes_redstork(self.doc_redstork)
+        return self.get_page_sizes_pdfium(self.doc_pdfium)
         # 
         if BACKEND_MuPDF:
             # return self.get_page_sizes_mupdf(self.doc)
@@ -314,8 +310,10 @@ class PdfRender(Process):
         # self.painter.end()
         return img, roi
 
-    def render_redstork(self, doc, page_no, dpi, roi):
-        page = doc[page_no]
+    def render_pdfium(self, doc, page_no, dpi, roi):
+        page = PDFIUM.FPDF_LoadPage(doc, page_no)
+        page_width = PDFIUM.FPDF_GetPageWidthF(page)
+        page_height = PDFIUM.FPDF_GetPageHeightF(page)
         # 
         zoom_ratio = dpi / 72.0
         x1 = roi.x() / zoom_ratio
@@ -323,46 +321,81 @@ class PdfRender(Process):
         x2 = (roi.x() + roi.width()) / zoom_ratio 
         y2 = (roi.y() + roi.height()) / zoom_ratio
         # 
-        x1 = min(max(x1, 0), page.width)
-        y1 = min(max(y1, 0), page.height)
-        x2 = min(max(x2, 0), page.width)
-        y2 = min(max(y2, 0), page.height)
+        x1 = min(max(x1, 0), page_width)
+        y1 = min(max(y1, 0), page_height)
+        x2 = min(max(x2, 0), page_width)
+        y2 = min(max(y2, 0), page_height)
         # 
-        # change to coordinate of PDF (the Y direction is opposite)
-        dx = page.crop_box[0]
-        dy = -page.crop_box[1] # negtive
-        rect = [
-            x1 + dx, 
-            page.height - (y2 + dy), 
-            x2 + dx, 
-            page.height - (y1 + dy)
-        ]
-        # 
-        # debug("Render (redstork) In: ", zoom_ratio)
+
+        debug("Render (PDFium) In: ", zoom_ratio)
         # time_0 = time.time()
-        if True:
-            buf, w, h = page.render_to_buffer(zoom_ratio, rect)
-            stride = w * 4
-            cvImg = np.frombuffer(buf, dtype=np.uint8)
-            cvImg = cvImg.reshape(h, w, 4)
-            cvImg = cv2.cvtColor(cvImg, cv2.COLOR_BGRA2RGBA)
-            img = QtGui.QImage(cvImg.data, w, h, stride, QtGui.QImage.Format_RGBA8888)
+        
+        # prepare white bitmap
+        img_width = int((x2 - x1)*zoom_ratio + 0.5)
+        img_height = int((y2 - y1)*zoom_ratio + 0.5)
+        bitmap = PDFIUM.FPDFBitmap_Create(img_width, img_height, 0)
+        PDFIUM.FPDFBitmap_FillRect(bitmap, 0, 0, img_width, img_height, 0xFFFFFFFF)
+
+        # compute transform matrix and clip region
+        cropbox_left = ctypes.c_float()
+        cropbox_top = ctypes.c_float()
+        cropbox_right = ctypes.c_float()
+        cropbox_bottom = ctypes.c_float()
+        # the Y direction of cropbox and mediabox is opposite to the normal image coordinate
+        PDFIUM.FPDFPage_GetCropBox(
+            page, 
+            ctypes.byref(cropbox_left), 
+            ctypes.byref(cropbox_bottom),
+            ctypes.byref(cropbox_right),
+            ctypes.byref(cropbox_top)
+        )
+        # if there is no valid crop box, use media box instead
+        if cropbox_right.value == 0 and cropbox_top.value == 0:
+            PDFIUM.FPDFPage_GetMediaBox(
+                page, 
+                ctypes.byref(cropbox_left), 
+                ctypes.byref(cropbox_bottom),
+                ctypes.byref(cropbox_right),
+                ctypes.byref(cropbox_top)
+            )
+        # the cropbox is defined on the unrotated page, here we need the rotation state of the page
+        rotation = PDFIUM.FPDFPage_GetRotation(page)
+        dx = -x1 * zoom_ratio
+        if rotation == 0 or rotation == 2:
+            dy = -(cropbox_top.value - cropbox_bottom.value - page_height + y1) * zoom_ratio
         else:
-            tmpImgFile = tempfile.NamedTemporaryFile(delete=True, suffix=('_%d.ppm' % self.pid))
-            # debug("Temp file name: ", tmpImgFile.name)
-            page.render(tmpImgFile.name, zoom_ratio, rect)
-            img = QtGui.QImage(tmpImgFile.name)
-            tmpImgFile.close()
-        # debug("Render (redstork) Out: ", img.width(), img.height())
+            # x and y axis are swapped
+            dy = -(cropbox_right.value - cropbox_left.value - page_height + y1) * zoom_ratio
+        matrix = PDFIUM.FS_MATRIX(zoom_ratio, 0, 0, zoom_ratio, dx, dy)
+        valid_region = PDFIUM.FS_RECTF(0, 0, img_width, img_height)
+
+        # render
+        PDFIUM.FPDF_RenderPageBitmapWithMatrix(bitmap, page, matrix, valid_region, PDFIUM.FPDF_LCD_TEXT | PDFIUM.FPDF_ANNOT)
+        
+        # convert rendered image
+        buffer = PDFIUM.FPDFBitmap_GetBuffer(bitmap)
+        buffer_ = ctypes.cast(
+            buffer, ctypes.POINTER(ctypes.c_ubyte * (img_width * img_height * 4))
+        )
+        cvImg = np.frombuffer(buffer_.contents, dtype=np.uint8)
+        cvImg = cvImg.reshape(img_height, img_width, 4)
+        cvImg = cv2.cvtColor(cvImg, cv2.COLOR_BGRA2RGBA)
+        img = QtGui.QImage(cvImg.data, img_width, img_height, img_width*4, QtGui.QImage.Format_RGBA8888)
+        # 
+        debug("Render (PDFium) Out: ", img.width(), img.height())
         # time_a = time.time()
         # debug("render time ", time_a - time_0)
 
-        roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
+        # release resources
+        if bitmap is not None:
+            PDFIUM.FPDFBitmap_Destroy(bitmap)
+        PDFIUM.FPDF_ClosePage(page)
 
+        roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
         return img, roi
 
     def render(self, page_no, dpi, roi):
-        return self.render_redstork(self.doc_redstork, page_no, dpi, roi)
+        return self.render_pdfium(self.doc_pdfium, page_no, dpi, roi)
         if BACKEND_MuPDF:
             try:
                 img, roi = self.render_mupdf(self.doc, page_no, dpi, roi)
