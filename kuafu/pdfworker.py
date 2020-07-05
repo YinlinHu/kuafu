@@ -13,9 +13,9 @@ BACKEND_MuPDF = False
 # import fitz # PyMuPDF
 from popplerqt5 import Poppler
 
-# follow https://github.com/BlockSigner/wowpng
+# follow https://github.com/BlockSigner/wowpng, and https://github.com/bblanchon/pdfium-binaries
 import ctypes
-import pdfium as PDFIUM
+import pypdfium as PDFIUM
 PDFIUM.FPDF_InitLibraryWithConfig(PDFIUM.FPDF_LIBRARY_CONFIG(2, None, None, 0))
 
 from multiprocessing import Process
@@ -337,35 +337,8 @@ class PdfRender(Process):
         PDFIUM.FPDFBitmap_FillRect(bitmap, 0, 0, img_width, img_height, 0xFFFFFFFF)
 
         # compute transform matrix and clip region
-        cropbox_left = ctypes.c_float()
-        cropbox_top = ctypes.c_float()
-        cropbox_right = ctypes.c_float()
-        cropbox_bottom = ctypes.c_float()
-        # the Y direction of cropbox and mediabox is opposite to the normal image coordinate
-        PDFIUM.FPDFPage_GetCropBox(
-            page, 
-            ctypes.byref(cropbox_left), 
-            ctypes.byref(cropbox_bottom),
-            ctypes.byref(cropbox_right),
-            ctypes.byref(cropbox_top)
-        )
-        # if there is no valid crop box, use media box instead
-        if cropbox_right.value == 0 and cropbox_top.value == 0:
-            PDFIUM.FPDFPage_GetMediaBox(
-                page, 
-                ctypes.byref(cropbox_left), 
-                ctypes.byref(cropbox_bottom),
-                ctypes.byref(cropbox_right),
-                ctypes.byref(cropbox_top)
-            )
-        # the cropbox is defined on the unrotated page, here we need the rotation state of the page
-        rotation = PDFIUM.FPDFPage_GetRotation(page)
         dx = -x1 * zoom_ratio
-        if rotation == 0 or rotation == 2:
-            dy = -(cropbox_top.value - cropbox_bottom.value - page_height + y1) * zoom_ratio
-        else:
-            # x and y axis are swapped
-            dy = -(cropbox_right.value - cropbox_left.value - page_height + y1) * zoom_ratio
+        dy = -y1 * zoom_ratio
         matrix = PDFIUM.FS_MATRIX(zoom_ratio, 0, 0, zoom_ratio, dx, dy)
         valid_region = PDFIUM.FS_RECTF(0, 0, img_width, img_height)
 
@@ -374,9 +347,8 @@ class PdfRender(Process):
         
         # convert rendered image
         buffer = PDFIUM.FPDFBitmap_GetBuffer(bitmap)
-        buffer_ = ctypes.cast(
-            buffer, ctypes.POINTER(ctypes.c_ubyte * (img_width * img_height * 4))
-        )
+        buffer_ = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte * (img_width * img_height * 4)))
+        # 
         cvImg = np.frombuffer(buffer_.contents, dtype=np.uint8)
         cvImg = cvImg.reshape(img_height, img_width, 4)
         cvImg = cv2.cvtColor(cvImg, cv2.COLOR_BGRA2RGBA)
