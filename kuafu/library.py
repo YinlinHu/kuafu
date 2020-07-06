@@ -12,6 +12,7 @@ from toc import TocManager
 import os
 import numpy as np
 import json
+import hashlib
 
 class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     # renderRequested = QtCore.pyqtSignal(int, float)
@@ -360,7 +361,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.thumb_graphicsview.close()
 
     def loadDocumentViewStatus(self, filename):
-        dataFileName = self.app_data_path + os.sep + filename.replace(os.sep, '_') + '.json'
+        dataFileName = self.app_data_path + "/" + hashlib.md5(filename.encode('utf-8')).hexdigest() + '.json'
         try:
             with open(dataFileName, 'r') as f:
                 status = json.load(f)
@@ -387,11 +388,12 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         # https://stackoverflow.com/questions/44257184/pyqt5-save-qbytearray-to-json-format
         splitterState = bytes(splitterState.toHex()).decode('utf-8')
         outDict = {
+            "docFilePath": filename,
             "docView1": docViewStatus1,
             "docView2": docViewStatus2,
             'docSplitter': splitterState,
             "thumbView": thumbViewStatus
         }
-        dataFileName = self.app_data_path + os.sep + filename.replace(os.sep, '_') + '.json'
+        dataFileName = self.app_data_path + "/" + hashlib.md5(filename.encode('utf-8')).hexdigest() + '.json'
         with open(dataFileName, 'w') as f:
-            json.dump(outDict, f, indent=True)
+            json.dump(outDict, f, indent=True, ensure_ascii=False)
