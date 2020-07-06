@@ -42,8 +42,9 @@ class PdfRender(Process):
         self.doc = None
         self.filename = None
         # 
-        self.painter = QtGui.QPainter()
-        self.link_color = QtGui.QColor(0,0,127, 40)
+        # self.painter = QtGui.QPainter()
+        # self.link_color = QtGui.QColor(0,0,127, 40)
+        # 
         self.exit_flag = False
 
         self.requests_queue = {}

@@ -23,7 +23,7 @@ setup(
       'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
       'Operating System :: POSIX :: Linux',
       #'Operating System :: MacOS :: MacOS X',
-      #'Operating System :: Microsoft :: Windows',
+      'Operating System :: Microsoft :: Windows',
       'Programming Language :: Python :: 3',
       ],
       entry_points={

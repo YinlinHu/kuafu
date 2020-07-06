@@ -127,7 +127,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
                 item = QtGui.QStandardItem(name)
                 item.setData(name, QtCore.Qt.UserRole + 1)
                 parent_file_item.appendRow(item)
-                if path == filename:
+                if os.path.samefile(path, filename):
                     modelIndex = self.fileview_model.indexFromItem(item)
         self.fileview.scrollTo(modelIndex, QtWidgets.QAbstractItemView.ScrollHint.PositionAtCenter)
         self.fileview.selectionModel().setCurrentIndex(modelIndex, QtCore.QItemSelectionModel.Select)
