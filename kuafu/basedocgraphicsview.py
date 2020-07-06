@@ -389,9 +389,12 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
             rd = self.render_list[rd_idx]
             resultsQ = rd.resultsQ
             # collect all results
-            size = resultsQ.qsize()
-            for i in range(size):
-                item = resultsQ.get() # will be blocked until when some data are avaliable
+            while True:
+                try:
+                    item = resultsQ.get(block=False)
+                except:
+                    # will raise the Queue.Empty exception if the queue is empty
+                    break
                 message = item[0]
                 filename = item[1]
                 if filename != self.current_filename: # the doc has changed, too late

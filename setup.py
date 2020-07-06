@@ -18,10 +18,12 @@ setup(
       author_email='huyinlin@gmail.com',
       license='GNU GPLv3',
       packages=['kuafu'],
-      install_requires=['PyQt5', 'numpy', 'opencv-python', 'pypdfium'], #external packages as dependencies
+      install_requires=['PyQt5', 'numpy', 'opencv-python-headless', 'pypdfium'], #external packages as dependencies
       classifiers=[
       'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
       'Operating System :: POSIX :: Linux',
+      #'Operating System :: MacOS :: MacOS X',
+      #'Operating System :: Microsoft :: Windows',
       'Programming Language :: Python :: 3',
       ],
       entry_points={

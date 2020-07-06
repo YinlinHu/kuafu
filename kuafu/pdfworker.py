@@ -221,12 +221,12 @@ class PdfRender(Process):
 
     def receive_commands(self):
         # collect all commands in queue
-        size = self.commandQ.qsize()
-        # debug("Qsize: ", size)
-        for i in range(size):
-             # will be blocked until when some data are avaliable
-             # as we get qsize first, so there's no block here
-            item = self.commandQ.get()
+        while True:
+            try:
+                item = self.commandQ.get(block=False)
+            except:
+                # will raise the Queue.Empty exception if the queue is empty
+                break
             command, params = item
             if command == 'SET':
                 filename = params[0]

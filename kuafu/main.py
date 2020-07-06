@@ -22,7 +22,6 @@ from utils import debug
 
 from resources.ui_main import Ui_window
 
-from document import DocumentView
 from library import LibraryView
 
 from dialogs import ExportToImageDialog, DocInfoDialog
@@ -48,7 +47,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_window):
 
         # https://stackoverflow.com/questions/2616483/close-button-only-for-some-tabs-in-qt
         # make the first tab unclosable
-        self.centraltabwidget.tabBar().tabButton(0, QtWidgets.QTabBar.RightSide).resize(0,0)
+        # self.centraltabwidget.tabBar().tabButton(0, QtWidgets.QTabBar.RightSide).resize(0,0)
 
         self.centraltabwidget.currentChanged.connect(self.onTabChanged)
         self.centraltabwidget.tabCloseRequested.connect(self.onTabClose)

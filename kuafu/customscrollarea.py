@@ -1,7 +1,6 @@
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore
 from PyQt5 import QtGui
-from popplerqt5 import Poppler
 
 from utils import debug
 

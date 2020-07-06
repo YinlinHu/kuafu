@@ -5,8 +5,6 @@ from PyQt5 import QtWidgets
 
 from resources.ui_annotation_item import Ui_annotationItemWidget
 
-from popplerqt5 import Poppler
-
 from utils import debug
 
 class AnnotationFrame(QtWidgets.QFrame):
