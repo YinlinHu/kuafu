@@ -2,12 +2,18 @@
 from setuptools import setup
 from kuafu import __version__
 
+def readme():
+    with open('README.md') as f:
+        return f.read()
+    
 setup(
       name='kuafu',
       version=__version__,
-      description='PDF manager',
-      keywords='PDF',
-      url='',
+      description='Another PDF manager',
+      long_description=readme(),
+      long_description_content_type="text/markdown",
+      keywords='Python PDFium',
+      url='https://github.com/YinlinHu/kuafu',
       author='Yinlin Hu',
       author_email='huyinlin@gmail.com',
       license='GNU GPLv3',

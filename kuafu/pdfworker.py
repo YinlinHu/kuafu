@@ -1,30 +1,32 @@
 from PyQt5 import QtCore
 from PyQt5 import QtGui
-
-import tempfile
+from multiprocessing import Process
+from utils import debug
+import time
+import cv2
+import numpy as np
 
 # https://hzqtc.github.io/2012/04/poppler-vs-mupdf.html
 # MuPDF is much faster at rendering, but slower at loading (get_page_sizes()) and also use more memories
 # 
 # PyMuPDF will freeze when zoom at 1600% for some files 
 # PyMuPDF will fail in opening some files
-BACKEND_MuPDF = False
 
-# import fitz # PyMuPDF
-from popplerqt5 import Poppler
+PDF_BACKEND = 'PDFIUM'
+# PDF_BACKEND = 'POPPLER'
+# PDF_BACKEND = 'MUPDF'
 
-# follow https://github.com/BlockSigner/wowpng, and https://github.com/bblanchon/pdfium-binaries
-import ctypes
-import pypdfium as PDFIUM
-PDFIUM.FPDF_InitLibraryWithConfig(PDFIUM.FPDF_LIBRARY_CONFIG(2, None, None, 0))
+if PDF_BACKEND == 'PDFIUM':
+    # follow https://github.com/BlockSigner/wowpng, and https://github.com/bblanchon/pdfium-binaries
+    import ctypes
+    import pypdfium as PDFIUM
+    PDFIUM.FPDF_InitLibraryWithConfig(PDFIUM.FPDF_LIBRARY_CONFIG(2, None, None, 0))
 
-from multiprocessing import Process
+elif PDF_BACKEND == 'POPPLER':
+    from popplerqt5 import Poppler
 
-from utils import debug
-import time
-
-import cv2
-import numpy as np
+elif PDF_BACKEND == 'MUPDF':
+    import fitz # PyMuPDF
 
 class PdfRender(Process):
 
@@ -51,22 +53,18 @@ class PdfRender(Process):
     def set_document(self, filename):
         self.filename = filename
         self.requests_queue = {}
-        
-        if BACKEND_MuPDF:
-            self.doc = fitz.open(self.filename)
-            # use poppler to load page sizes (much faster)
-            password = ""
-            self.doc_poppler = Poppler.Document.load(self.filename, password.encode(), password.encode())
-        else:
-            password = ""
+        if PDF_BACKEND == 'PDFIUM':
+            self.doc = PDFIUM.FPDF_LoadDocument(self.filename, None)
+        elif PDF_BACKEND == 'POPPLER':
+            password = ''
             self.doc = Poppler.Document.load(self.filename, password.encode(), password.encode())
             self.doc.setRenderHint(
                 Poppler.Document.TextAntialiasing
                 | Poppler.Document.TextHinting
                 | Poppler.Document.Antialiasing
                 )
-        # 
-        self.doc_pdfium = PDFIUM.FPDF_LoadDocument(self.filename, None)
+        elif PDF_BACKEND == 'MUPDF':
+            self.doc = fitz.open(self.filename)
 
     def get_page_sizes_mupdf(self, doc):
         pages_size_inch = []
@@ -102,13 +100,12 @@ class PdfRender(Process):
 
     def get_page_sizes(self):
         # extract page sizes for all pages
-        return self.get_page_sizes_pdfium(self.doc_pdfium)
-        # 
-        if BACKEND_MuPDF:
-            # return self.get_page_sizes_mupdf(self.doc)
-            return self.get_page_sizes_poppler(self.doc_poppler)
-        else:
+        if PDF_BACKEND == 'PDFIUM':
+            return self.get_page_sizes_pdfium(self.doc)
+        elif PDF_BACKEND == 'POPPLER':
             return self.get_page_sizes_poppler(self.doc)
+        elif PDF_BACKEND == 'MUPDF':
+            return self.get_page_sizes_mupdf(self.doc)
 
     def save_rendering_command(self, page_no, dpi, roi, visible_regions):
         if page_no in self.requests_queue:
@@ -193,10 +190,9 @@ class PdfRender(Process):
         return title, page_num, top
 
     def getTableOfContents(self):
-        if BACKEND_MuPDF:
-            return self.doc.getToC(simple=False)
-        else:
-            # Poppler API
+        if PDF_BACKEND == 'PDFIUM':
+            return [] # TODO
+        elif PDF_BACKEND == 'POPPLER':
             toc = self.doc.toc()
             if not toc:
                 return []
@@ -220,6 +216,8 @@ class PdfRender(Process):
                     nodes_queue.append([current_node, current_level + 1])
                     current_node = current_node.previousSibling()
             return toc_list
+        elif PDF_BACKEND == 'MUPDF':
+            return self.doc.getToC(simple=False)
 
     def receive_commands(self):
         # collect all commands in queue
@@ -268,12 +266,12 @@ class PdfRender(Process):
         x2 = min(max(x2, 0), page_rect.width)
         y2 = min(max(y2, 0), page_rect.height)
         clip = fitz.Rect(x1, y1, x2, y2)
-        # debug("Render (MuPDF) In: ", zoom_ratio, clip)
+        debug("Render (MuPDF) In: ", zoom_ratio, clip)
         pix = page.getPixmap(matrix=fitz.Matrix(zoom_ratio, zoom_ratio), colorspace='RGB', clip=clip, alpha=False)
         # set the correct QImage format depending on alpha
         fmt = QtGui.QImage.Format_RGBA8888 if pix.alpha else QtGui.QImage.Format_RGB888
         img = QtGui.QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
-        # debug("Render (MuPDF) Out: ", img.width(), img.height())
+        debug("Render (MuPDF) Out: ", img.width(), img.height())
         # 
         roi.setCoords(x1 * zoom_ratio, y1 * zoom_ratio, x2 * zoom_ratio, y2 * zoom_ratio) # write back roi
 
@@ -293,9 +291,9 @@ class PdfRender(Process):
         y1 = min(max(y1, 0), pg_height_pix)
         x2 = min(max(x2, 0), pg_width_pix)
         y2 = min(max(y2, 0), pg_height_pix)
-        # debug("Render (Poppler) In: ", x1, y1, x2 - x1, y2 - y1)
+        debug("Render (Poppler) In: ", x1, y1, x2 - x1, y2 - y1)
         img = page.renderToImage(dpi, dpi, x1, y1, x2 - x1, y2 - y1)
-        # debug("Render (Poppler) Out: ", img.width(), img.height())
+        debug("Render (Poppler) Out: ", img.width(), img.height())
         # 
         roi.setCoords(x1, y1, x2, y2) # write back roi
 
@@ -367,15 +365,12 @@ class PdfRender(Process):
         return img, roi
 
     def render(self, page_no, dpi, roi):
-        return self.render_pdfium(self.doc_pdfium, page_no, dpi, roi)
-        if BACKEND_MuPDF:
-            try:
-                img, roi = self.render_mupdf(self.doc, page_no, dpi, roi)
-            except:
-                img, roi = self.render_poppler(self.doc_poppler, page_no, dpi, roi)
-            return img, roi
-        else:
+        if PDF_BACKEND == 'PDFIUM':
+            return self.render_pdfium(self.doc, page_no, dpi, roi)
+        elif PDF_BACKEND == 'POPPLER':
             return self.render_poppler(self.doc, page_no, dpi, roi)
+        elif PDF_BACKEND == 'MUPDF':
+            return self.render_mupdf(self.doc, page_no, dpi, roi)
 
     def run(self):
         """ render(int, float)
