@@ -81,7 +81,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.fileview.setModel(self.fileview_model)
         self.fileview.clicked.connect(self.onFileClick)
 
-        self.fileview.setAlternatingRowColors(True)
+        # self.fileview.setAlternatingRowColors(True)
         # self.annotview.setAlternatingRowColors(True)
 
         # self.annotview_model = QtGui.QStandardItemModel()

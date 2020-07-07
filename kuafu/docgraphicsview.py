@@ -8,7 +8,7 @@ class DocGraphicsView(BaseDocGraphicsView):
     def __init__(self, parent, render_num=1):
         super(DocGraphicsView, self).__init__(parent, render_num)
 
-        self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.white)) # set background
+        self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.gray)) # set background
 
     def wheelEvent(self, ev):
         # debug("wheelEvent in BaseDocGraphicsView")

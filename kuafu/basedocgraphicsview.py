@@ -71,7 +71,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.fitwidth_flag = True
 
         self.horispacing = 3
-        self.vertspacing = 5
+        self.vertspacing = 3
 
         self.horizontalScrollBar().valueChanged.connect(self.onScrollValueChanged)
         self.verticalScrollBar().valueChanged.connect(self.onScrollValueChanged)
