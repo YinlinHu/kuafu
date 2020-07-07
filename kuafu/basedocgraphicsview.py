@@ -3,8 +3,7 @@ from PyQt5 import QtCore
 from PyQt5 import QtGui
 # from PyQt5 import QtOpenGL
 
-from pdfworker import PdfRender
-from multiprocessing import Queue
+from pdfworker import PdfWorker
 from page import PageGraphicsItem
 
 from utils import debug
@@ -14,8 +13,6 @@ import time
 import numpy as np
 
 class BaseDocGraphicsView(QtWidgets.QGraphicsView):
-    loadFinished = QtCore.pyqtSignal(list)
-    tocLoaded = QtCore.pyqtSignal(list)
     viewportChanged = QtCore.pyqtSignal(str, int, dict)
     zoomRatioChanged = QtCore.pyqtSignal(float)
     viewColumnChanged = QtCore.pyqtSignal(int)
@@ -37,10 +34,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.setScene(self.scene)
 
         self.page_items = [] # instances of PageGraphicsItem
-        self.load_finished_flag = False
 
-        self.relocationInitInfo = None
-        
         self.current_filename = None
 
         self.page_counts = 0
@@ -60,9 +54,9 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.current_highlighted_pages = []
 
         for i in range(self.render_num):
-            tmpRender = PdfRender(Queue(), Queue())
-            tmpRender.start()
-            self.render_list.append(tmpRender)
+            tmpWorker = PdfWorker()
+            tmpWorker.renderedImageReceived.connect(self.onRenderedImageReceived)
+            self.render_list.append(tmpWorker)
 
         self.screen_dpi = 0
 
@@ -101,11 +95,6 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.resize_timer.timeout.connect(self.resizeHandler)
         self.resize_timer.start(200)
 
-        # read the queue periodically
-        self.queue_timer = QtCore.QTimer(self)
-        self.queue_timer.timeout.connect(self.retrieveQueueResults)
-        self.queue_timer.start(20)
-
     def refreshSignals(self):
         self.viewColumnChanged.emit(self.view_column_count)
         self.emptyLeadingPageChanged.emit(self.leading_empty_pages)
@@ -115,8 +104,6 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
             self.zoomRatioChanged.emit(self.zoom_levels[self.current_zoom_index])
 
     def getViewStatus(self):
-        if not self.load_finished_flag:
-            return None
         relocationInfo = self.getPageByPos(0, 0)
         viewStatus = {
             "viewColumnCount": self.view_column_count,
@@ -127,7 +114,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         }
         return viewStatus
 
-    def setDocument(self, filename, screen_dpi, viewStatus=None, pagesInfo=None):
+    def setDocument(self, filename, screen_dpi, pages_size_inch, viewStatus=None):
         # clear information
         self.scene.clear()
         self.page_items = []
@@ -139,7 +126,6 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.current_rendering_dpi = []
         self.rendered_info = {}
         self.current_highlighted_pages = []
-        self.load_finished_flag = False
         self.view_column_count = 1
         self.leading_empty_pages = 0
         self.fitwidth_flag = True
@@ -150,9 +136,9 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
             self.leading_empty_pages = viewStatus['leadingEmptyPage']
             self.current_zoom_index = viewStatus['zoomIndex']
             self.fitwidth_flag = viewStatus['zoomFitWidth']
-            self.relocationInitInfo = viewStatus['location']
+            relocationInitInfo = viewStatus['location']
         else:
-            self.relocationInitInfo = None
+            relocationInitInfo = None
 
         #
         self.current_filename = filename
@@ -160,18 +146,8 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
         # reSET for all render processes
         for rd in self.render_list:
-            rd.commandQ.put(['SET', [self.current_filename]])
+            rd.setDocument(self.current_filename)
 
-        if pagesInfo:
-            self.onPageSizesReceived(pagesInfo)
-        else:
-            # query page size using the first worker
-            self.render_list[0].commandQ.put(['PAGESIZES', [None]])
-
-        # query Toc using the first worker
-        self.render_list[0].commandQ.put(['TOC', [None]])
-
-    def onPageSizesReceived(self, pages_size_inch):
         # time_0 = time.time()
         self.page_counts = len(pages_size_inch)
         self.pages_size_inch = pages_size_inch
@@ -184,12 +160,10 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         #     self.page_items[i] = pageItem
 
         self.setColumnNumber(min(self.view_column_count, self.page_counts))
-        self.load_finished_flag = True
         # 
-        self.redrawPages(self.relocationInitInfo)
+        self.redrawPages(relocationInitInfo)
         # 
         self.refreshSignals()
-        self.loadFinished.emit(self.pages_size_inch)
 
     def onViewportChanged(self):
         self.renderCurrentVisiblePages()
@@ -243,9 +217,6 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
                 self.current_pages_size_pix.append([int(width), int(height)])
 
     def getVisibleRegions(self):
-        if not self.load_finished_flag:
-            return {}
-
         visRect = self.viewport().rect() # visible area
         visRect = self.mapToScene(visRect).boundingRect() # change to scene coordinates
         # 
@@ -264,9 +235,6 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
             regions[pg_no] = intsec
 
         self.current_visible_regions = regions
-
-    def renderRequest(self, page_no, dpi, roi, render_idx, visible_regions):
-        self.render_list[render_idx].commandQ.put(['RENDER', [page_no, dpi, roi, visible_regions]])
 
     def initializePage(self, page_no):
         if self.page_items[page_no] is None:
@@ -318,7 +286,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
                 prefixNum = page_no % self.render_num
                 render_idx = (prefixNum + pIdx) % self.render_num
 
-                self.renderRequest(page_no, dpi, roi, render_idx, self.current_visible_regions)
+                self.render_list[render_idx].requestRender(page_no, dpi, roi, self.current_visible_regions)
 
                 debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %.1f %.1f %.1f %.1f> <roi: %.1f %.1f %.1f %.1f>" % (
                     render_idx, page_no, dpi, 
@@ -326,10 +294,14 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
                     roi.left(), roi.top(), roi.width(), roi.height()
                     ))
 
-    def handleSingleRenderedImage(self, render_idx, filename, page_no, dpi, roi, img_byte_array):
-        debug("-> Rendering %d Completed : <page:%d> <dpi:%.2f> <roi: %.1f %.1f %.1f %.1f>" % (
-            render_idx, page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
+    def onRenderedImageReceived(self, filename, page_no, dpi, roi, image):
+        debug("-> Rendering Completed : <page:%d> <dpi:%.2f> <roi: %.1f %.1f %.1f %.1f>" % (
+            page_no, dpi, roi.left(), roi.top(), roi.width(), roi.height()
         ))
+
+        if filename != self.current_filename:
+            debug("file name changed: %s -> %s" % (filename, self.current_filename))
+            return
 
         # if page_no not in self.current_visible_regions:
         #     debug("become unvisible: %d. skipping" % page_no)
@@ -347,11 +319,6 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         if dpi != self.current_rendering_dpi[page_no]:
             debug("unmatched DPI: %.2f -> %.2f. skipping" % (dpi, self.current_rendering_dpi[page_no]))
             return
-            
-        # QByteArray to QImage
-        img_buffer = QtCore.QBuffer(img_byte_array)
-        img_buffer.open(QtCore.QIODevice.ReadOnly)
-        image = QtGui.QImageReader(img_buffer).read()
 
         # crop to container's size
         # containerSize = self.page_items[page_no].rect()
@@ -383,33 +350,6 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
                 #self.page_items[firstKey].clear()
 
         # debug("Rendered Images: ", self.rendered_pages)
-
-    def retrieveQueueResults(self):
-        for rd_idx in range(self.render_num):
-            rd = self.render_list[rd_idx]
-            resultsQ = rd.resultsQ
-            # collect all results
-            while True:
-                try:
-                    item = resultsQ.get(block=False)
-                except:
-                    # will raise the Queue.Empty exception if the queue is empty
-                    break
-                message = item[0]
-                filename = item[1]
-                if filename != self.current_filename: # the doc has changed, too late
-                    continue
-                # 
-                if message == 'PAGESIZES_RES':
-                    pages_size_inch = item[2]
-                    debug("%d Page Sizes Received" % len(pages_size_inch))
-                    self.onPageSizesReceived(pages_size_inch)
-                if message == 'TOC_RES':
-                    toc = item[2]
-                    self.tocLoaded.emit(toc)
-                elif message == 'RENDER_RES':
-                    page_no, dpi, roi, img_byte_array = item[2:]
-                    self.handleSingleRenderedImage(rd_idx, filename, page_no, dpi, roi, img_byte_array)
 
     def __rearrangePages(self):
         if len(self.current_pages_size_pix) == 0:
@@ -504,7 +444,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         return page_no, x_ratio, y_ratio, view_x, view_y
 
     def redrawPages(self, relocationInfo=None):
-        if not self.load_finished_flag:
+        if self.page_counts == 0:
             return
 
         # time_0 = time.time()
@@ -586,8 +526,6 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
     def gotoPage(self, pg_no):
         # make the page as the first visible one (it can not guarantee for multi-column cases)
-        if not self.load_finished_flag:
-            return
         visRect = self.viewport().rect() # visible area
         visRect = self.mapToScene(visRect).boundingRect() # change to scene coordinates
         flag, x, y, w, h = self.current_pages_rect[pg_no]
@@ -606,10 +544,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
 
     def destroyRenders(self):
         for rd in self.render_list:
-            rd.commandQ.put(['STOP', []])
-        for rd in self.render_list:
-            # rd.wait()
-            rd.join()
+            rd.stop()
         self.render_list = []
         self.render_num = 0
 

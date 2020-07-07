@@ -27,7 +27,7 @@ class ThumbGraphicsView(BaseDocGraphicsView):
         # 
         if filename != self.current_filename:
             return
-        if not self.load_finished_flag:
+        if self.page_counts == 0:
             return
         # 
         # remove current highlighted first
@@ -55,7 +55,7 @@ class ThumbGraphicsView(BaseDocGraphicsView):
 
     def mousePressEvent(self, ev):
         # debug('mousePressEvent in ThumbGraphicsView')
-        if not self.load_finished_flag:
+        if self.page_counts == 0:
             return
         self.setCursor(QtCore.Qt.ClosedHandCursor)
         page_no, x_ratio, y_ratio, _, _ = self.getPageByPos(ev.pos().x(), ev.pos().y())
@@ -64,14 +64,14 @@ class ThumbGraphicsView(BaseDocGraphicsView):
 
     def mouseReleaseEvent(self, ev):
         # debug('mouseReleaseEvent in ThumbGraphicsView')
-        if not self.load_finished_flag:
+        if self.page_counts == 0:
             return
         self.setCursor(QtCore.Qt.ArrowCursor)
         return super().mouseReleaseEvent(ev)
 
     def mouseMoveEvent(self, ev):
         # debug('mouseMoveEvent in ThumbGraphicsView')
-        if not self.load_finished_flag:
+        if self.page_counts == 0:
             return
         if self.isMousePressed:
             page_no, x_ratio, y_ratio, _, _ = self.getPageByPos(ev.pos().x(), ev.pos().y())

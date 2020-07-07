@@ -1,6 +1,6 @@
 from PyQt5 import QtCore
 from PyQt5 import QtGui
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 from utils import debug
 import time
 import cv2
@@ -28,13 +28,13 @@ elif PDF_BACKEND == 'POPPLER':
 elif PDF_BACKEND == 'MUPDF':
     import fitz # PyMuPDF
 
-class PdfRender(Process):
+class PdfInternalWorker(Process):
 
     # considering realtime, the request may be dropped
     # rendered = QtCore.pyqtSignal(str, int, float, QtGui.QImage)
 
     def __init__(self, commandQ, resultsQ):
-        super(PdfRender, self).__init__()
+        super(PdfInternalWorker, self).__init__()
         #
         self.commandQ = commandQ
         self.resultsQ = resultsQ
@@ -190,9 +190,53 @@ class PdfRender(Process):
             top = -1
         return title, page_num, top
 
+    def get_toc_item_pdfium(self, doc, bookmark_node):
+        buflen = 4096
+        titleBuf = ctypes.create_string_buffer(buflen)
+        titleByteLen = PDFIUM.FPDFBookmark_GetTitle(bookmark_node, titleBuf, buflen)
+        assert(titleByteLen <= buflen)
+        titleStr = titleBuf.raw[:titleByteLen].decode('utf-16-le')[:-1]
+        dest = PDFIUM.FPDFBookmark_GetDest(doc, bookmark_node)
+        page_num = PDFIUM.FPDFDest_GetDestPageIndex(doc, dest)
+        return titleStr, page_num + 1, None
+
     def getTableOfContents(self):
         if PDF_BACKEND == 'PDFIUM':
-            return [] # TODO
+            firstBookmark = PDFIUM.FPDFBookmark_GetFirstChild(self.doc, None)
+            if firstBookmark is None:
+                return []
+            # construct toc
+            # each item will contain [level (the first entry is always 1), title, page (1-based), extra]
+            # consistent with MuPDF
+            toc_list = []
+            current_level = 1
+            nodes_queue = []
+            #  
+            # push children of the first level in queue in reverse order
+            childrens = []
+            child_node = firstBookmark
+            while child_node:
+                childrens.append(child_node)
+                child_node = PDFIUM.FPDFBookmark_GetNextSibling(self.doc, child_node)
+            for i in reversed(range(0, len(childrens))):
+                nodes_queue.append([childrens[i], current_level])
+            # 
+            while len(nodes_queue) > 0:
+                current_node, current_level = nodes_queue.pop(-1) # get the last one
+                # 
+                title, page_num, _ = self.get_toc_item_pdfium(self.doc, current_node)
+                toc_list.append([current_level, title, page_num, None])
+                # 
+                # push children in queue in reverse order
+                childrens = []
+                child_node = PDFIUM.FPDFBookmark_GetFirstChild(self.doc, current_node)
+                while child_node:
+                    childrens.append(child_node)
+                    child_node = PDFIUM.FPDFBookmark_GetNextSibling(self.doc, child_node)
+                for i in reversed(range(0, len(childrens))):
+                    nodes_queue.append([childrens[i], current_level + 1])
+                # 
+            return toc_list
         elif PDF_BACKEND == 'POPPLER':
             toc = self.doc.toc()
             if not toc:
@@ -377,7 +421,7 @@ class PdfRender(Process):
         """ render(int, float)
         This slot takes page no. and dpi and renders that page, then emits a signal with QImage"""
 
-        debug('render entered.')
+        debug('PdfInternalWorker entered.')
 
         while self.exit_flag == False:
             QtCore.QThread.msleep(20)
@@ -407,9 +451,74 @@ class PdfRender(Process):
             
             self.resultsQ.put(['RENDER_RES', self.filename, page_no, dpi, roi, img_byte_array])
 
-        debug('render exited.')
+        debug('PdfInternalWorker exited.')
 
-class PdfReader(QtCore.QObject):
+class PdfWorker(QtCore.QObject):
+    pageSizesReceived = QtCore.pyqtSignal(str, list)
+    bookmarksReceived = QtCore.pyqtSignal(str, list)
+    renderedImageReceived = QtCore.pyqtSignal(str, int, float, QtCore.QRectF, QtGui.QImage)
+    # 
+    def __init__(self):
+        super(PdfWorker, self).__init__()
+        self.commandQ = Queue()
+        self.resultsQ = Queue()
+        self.worker = PdfInternalWorker(self.commandQ, self.resultsQ)
+        self.worker.start()
+
+        # read the queue periodically
+        self.queue_timer = QtCore.QTimer(self)
+        self.queue_timer.timeout.connect(self._retrieveQueueResults)
+        self.queue_timer.start(20)
+
+    def __del__(self):
+        self.stop()
+
+    def setDocument(self, filename):
+        self.commandQ.put(['SET', [filename]])
+
+    def requestGetPageSizes(self):
+        self.commandQ.put(['PAGESIZES', [None]])
+
+    def requestGetBookmarks(self):
+        self.commandQ.put(['TOC', [None]])
+        
+    def requestRender(self, page_no, dpi, roi, visible_regions):
+        self.commandQ.put(['RENDER', [page_no, dpi, roi, visible_regions]])
+
+    def stop(self):
+        self.commandQ.put(['STOP', []])
+        self.worker.join()
+
+    def _retrieveQueueResults(self):
+        while True:
+            try:
+                item = self.resultsQ.get(block=False)
+            except:
+                # will raise the Queue.Empty exception if the queue is empty
+                break
+            # 
+            message = item[0]
+            filename = item[1]
+            # 
+            if message == 'PAGESIZES_RES':
+                pages_size_inch = item[2]
+                self.pageSizesReceived.emit(filename, pages_size_inch)
+            elif message == 'TOC_RES':
+                toc = item[2]
+                self.bookmarksReceived.emit(filename, toc)
+            elif message == 'RENDER_RES':
+                page_no, dpi, roi, img_byte_array = item[2:]
+
+                # QByteArray to QImage
+                img_buffer = QtCore.QBuffer(img_byte_array)
+                img_buffer.open(QtCore.QIODevice.ReadOnly)
+                image = QtGui.QImageReader(img_buffer).read()
+                # 
+                self.renderedImageReceived.emit(filename, page_no, dpi, roi, image)
+            else:
+                assert(0)
+    
+class PdfReaderDraft(QtCore.QObject):
     """
     will be run in thread
     """

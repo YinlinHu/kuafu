@@ -6,7 +6,7 @@ from PyQt5 import QtGui
 from PyQt5 import QtWidgets
 
 from utils import debug
-from pdfworker import PdfReader
+from pdfworker import PdfWorker
 from toc import TocManager
 
 import os
@@ -33,6 +33,9 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.app_data_path = app_data_path
         self.filename = None
         self.viewStatus = None
+        self.pdfInfoReader = PdfWorker()
+        self.pdfInfoReader.pageSizesReceived.connect(self.onPageSizesReceived)
+        self.pdfInfoReader.bookmarksReceived.connect(self.onBookmarksReceived)
 
         self.splitter_doc.setSizes([1, 0]) # the second view is folded by default
         self.splitter_doc.setCollapsible(0, False) 
@@ -50,25 +53,20 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.pushButton_fourColumn_thumb.clicked.connect(lambda:self.thumb_graphicsview.setColumnNumber(4))
         self.pushButton_emptyPage_thumb.clicked.connect(self.setThumbPrecedingEmptypage)
 
-        self.doc_graphicsview_1.loadFinished.connect(self.onDoc1LoadFinished)
         self.doc_graphicsview_1.viewColumnChanged.connect(self.onViewColumnChanged)
         self.doc_graphicsview_1.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
         self.doc_graphicsview_1.zoomRatioChanged.connect(self.onZoomRatioChanged)
-        self.doc_graphicsview_1.tocLoaded.connect(self.onTocLoaded)
         self.doc_graphicsview_1.viewportChanged.connect(self.onDocViewportChanged)
         self.doc_graphicsview_1.focusIn.connect(self.OnDoc1FocusIn)
 
-        # self.doc_graphicsview_2.loadFinished.connect(self.onDoc2LoadFinished)
         self.doc_graphicsview_2.viewColumnChanged.connect(self.onViewColumnChanged)
         self.doc_graphicsview_2.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
         self.doc_graphicsview_2.zoomRatioChanged.connect(self.onZoomRatioChanged)
-        self.doc_graphicsview_2.tocLoaded.connect(self.onTocLoaded)
         self.doc_graphicsview_2.viewportChanged.connect(self.onDocViewportChanged)
         self.doc_graphicsview_2.focusIn.connect(self.OnDoc2FocusIn)
 
         self.thumb_graphicsview.viewColumnChanged.connect(self.onThumbViewColumnChanged)
         self.thumb_graphicsview.emptyLeadingPageChanged.connect(self.onThumbEmptyLeadingPageChanged)
-        self.thumb_graphicsview.loadFinished.connect(self.onThumbLoadFinished)
         self.thumb_graphicsview.pageRelocationRequest.connect(self.onThumbPageRelocationRequest)
         self.thumb_graphicsview.zoomRequest.connect(self.onThumbZoomRequest)
 
@@ -157,34 +155,36 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     def loadDocument(self, filename, screen_dpi):
         viewStatus = self.loadDocumentViewStatus(filename)
         self.viewStatus = [viewStatus, filename]
-        # 
-        status = viewStatus['docView1'] if viewStatus else None
-        self.doc_graphicsview_1.setDocument(filename, screen_dpi, status)
+        self.pdfInfoReader.setDocument(filename)
+        self.pdfInfoReader.requestGetPageSizes()
+        self.pdfInfoReader.requestGetBookmarks()
 
-    def onTocLoaded(self, toc):
-        self.tocManager.setToc(toc)
-        self.tocManager.update(self.current_page_idx)
-
-    def onTocIndexChanged(self, page_no):
-        debug("onTocIndexChanged: %d" % page_no)
-        self.current_graphicsview.gotoPage(page_no)
-
-    def onDoc1LoadFinished(self, pagesInfo):
-        # debug("onDoc1LoadFinished")
-        # 
-        viewStatus, filename = self.viewStatus
-        if filename != self.filename:
+    def onPageSizesReceived(self, filename, pages_size_inch):
+        debug("onPageSizesReceived:")
+        viewStatus, vfilename = self.viewStatus
+        if filename != vfilename:
             return
+        status = viewStatus['docView1'] if viewStatus else None
+        self.doc_graphicsview_1.setDocument(self.filename, self.screen_dpi, pages_size_inch, status)
         status = viewStatus['docView2'] if viewStatus else None
-        self.doc_graphicsview_2.setDocument(self.filename, self.screen_dpi, status, pagesInfo)
+        self.doc_graphicsview_2.setDocument(self.filename, self.screen_dpi, pages_size_inch, status)
         status = viewStatus['thumbView'] if viewStatus else None
-        self.thumb_graphicsview.setDocument(self.filename, self.screen_dpi, status, pagesInfo)
+        self.thumb_graphicsview.setDocument(self.filename, self.screen_dpi, pages_size_inch, status)
         status = viewStatus['docSplitter'] if viewStatus else None
         if status:
             status = QtCore.QByteArray.fromHex(bytes(status, 'utf-8'))
             self.splitter_doc.restoreState(status)
         else:
             self.splitter_doc.setSizes([1, 0]) # the second view is folded by default
+
+    def onBookmarksReceived(self, filename, toc):
+        debug("onBookmarksReceived")
+        self.tocManager.setToc(toc)
+        self.tocManager.update(self.current_page_idx)
+
+    def onTocIndexChanged(self, page_no):
+        debug("onTocIndexChanged: %d" % page_no)
+        self.current_graphicsview.gotoPage(page_no)
 
     def onThumbLoadFinished(self):
         # debug("onThumbLoadFinished")
@@ -359,6 +359,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.doc_graphicsview_1.close()
         self.doc_graphicsview_2.close()
         self.thumb_graphicsview.close()
+        self.pdfInfoReader.stop()
 
     def loadDocumentViewStatus(self, filename):
         dataFileName = self.app_data_path + "/" + hashlib.md5(filename.encode('utf-8')).hexdigest() + '.json'
