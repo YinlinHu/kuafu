@@ -264,6 +264,173 @@ class PdfInternalWorker(Process):
         elif PDF_BACKEND == 'MUPDF':
             return self.doc.getToC(simple=False)
 
+    def get_text_objects(self, doc, page_no):
+        text_objects = []
+        if PDF_BACKEND == 'PDFIUM':
+            page = PDFIUM.FPDF_LoadPage(doc, page_no)
+            page_height = PDFIUM.FPDF_GetPageHeightF(page)
+            textpage = PDFIUM.FPDFText_LoadPage(page)
+            charCnt = PDFIUM.FPDFText_CountChars(textpage)
+            # 
+            left = ctypes.c_float()
+            bottom = ctypes.c_float()
+            right = ctypes.c_float()
+            top = ctypes.c_float()
+            # 
+            PDFIUM.FPDFPage_GetCropBox(page,
+                    ctypes.byref(left), ctypes.byref(bottom), 
+                    ctypes.byref(right), ctypes.byref(top)
+                )
+            dx = left.value
+            dy = top.value
+            # 
+            for i in range(charCnt):
+                iChar = chr(PDFIUM.FPDFText_GetUnicode(textpage, i))
+                left = ctypes.c_double()
+                bottom = ctypes.c_double()
+                right = ctypes.c_double()
+                top = ctypes.c_double()
+                PDFIUM.FPDFText_GetCharBox(
+                    textpage, i, 
+                    ctypes.byref(left), ctypes.byref(right), 
+                    ctypes.byref(bottom), ctypes.byref(top)
+                )
+                # change to image coordinate
+                x = left.value - dx
+                y = dy - top.value if dy > 0 else page_height - top.value
+                rect = [x, y, right.value - left.value, top.value - bottom.value]
+                # print(iChar, rect)
+                text_objects.append([iChar, rect])
+            PDFIUM.FPDFText_ClosePage(textpage)
+            PDFIUM.FPDF_ClosePage(page)
+        elif PDF_BACKEND == 'POPPLER':
+            # Not implemented
+            pass
+        elif PDF_BACKEND == 'MUPDF':
+            # Not implemented
+            pass
+        return text_objects
+
+    def get_image_objects(self, doc, page_no):
+        # TODO
+        objects = []
+        if PDF_BACKEND == 'PDFIUM':
+            page = PDFIUM.FPDF_LoadPage(doc, page_no)
+            objCnt = PDFIUM.FPDFPage_CountObjects(page)
+            for i in range(objCnt):
+                obj = PDFIUM.FPDFPage_GetObject(page, i)
+                obj_type = PDFIUM.FPDFPageObj_GetType(obj)
+                if obj_type == PDFIUM.FPDF_PAGEOBJ_IMAGE:
+                    left = ctypes.c_float()
+                    bottom = ctypes.c_float()
+                    right = ctypes.c_float()
+                    top = ctypes.c_float()
+                    PDFIUM.FPDFPageObj_GetBounds(
+                        obj, 
+                        ctypes.byref(left), ctypes.byref(bottom), 
+                        ctypes.byref(right), ctypes.byref(top)
+                        )
+                    pass
+                else:
+                    pass
+            PDFIUM.FPDF_ClosePage(page)
+        elif PDF_BACKEND == 'POPPLER':
+            # Not implemented
+            pass
+        elif PDF_BACKEND == 'MUPDF':
+            # Not implemented
+            pass
+        return objects
+
+    def get_link_objects(self, doc, page_no):
+        link_objects = []
+        if PDF_BACKEND == 'PDFIUM':
+            page = PDFIUM.FPDF_LoadPage(doc, page_no)
+            page_height = PDFIUM.FPDF_GetPageHeightF(page)
+            # 
+            left = ctypes.c_float()
+            bottom = ctypes.c_float()
+            right = ctypes.c_float()
+            top = ctypes.c_float()
+            # 
+            PDFIUM.FPDFPage_GetCropBox(page,
+                    ctypes.byref(left), ctypes.byref(bottom), 
+                    ctypes.byref(right), ctypes.byref(top)
+                )
+            dx = left.value
+            dy = top.value
+            # 
+            start_pos = ctypes.c_int()
+            start_pos.value = 0
+            link_annot = PDFIUM.FPDF_LINK()
+            ret = PDFIUM.FPDFLink_Enumerate(page, ctypes.byref(start_pos), ctypes.byref(link_annot))
+            while ret:
+                dest = PDFIUM.FPDFLink_GetDest(doc, link_annot)
+                dest_pg_no = PDFIUM.FPDFDest_GetDestPageIndex(doc, dest)
+                pdf_rect = PDFIUM.FS_RECTF()
+                PDFIUM.FPDFLink_GetAnnotRect(link_annot, ctypes.byref(pdf_rect))
+                # change to image coordinate
+                x = pdf_rect.left - dx
+                y = dy - pdf_rect.top if dy > 0 else page_height - pdf_rect.top
+                rect = [x, y, pdf_rect.right - pdf_rect.left, pdf_rect.top - pdf_rect.bottom]
+                # print(dest_pg_no, rect)
+                link_objects.append([dest_pg_no, rect])
+                # 
+                ret = PDFIUM.FPDFLink_Enumerate(page, ctypes.byref(start_pos), ctypes.byref(link_annot))
+            PDFIUM.FPDF_ClosePage(page)
+        elif PDF_BACKEND == 'POPPLER':
+            # Not implemented
+            pass
+        elif PDF_BACKEND == 'MUPDF':
+            # Not implemented
+            pass
+        return link_objects
+
+    def get_annot_objects(self, doc, page_no):
+        # TODO
+        annot_objects = []
+        if PDF_BACKEND == 'PDFIUM':
+            page = PDFIUM.FPDF_LoadPage(doc, page_no)
+            page_height = PDFIUM.FPDF_GetPageHeightF(page)
+            # 
+            left = ctypes.c_float()
+            bottom = ctypes.c_float()
+            right = ctypes.c_float()
+            top = ctypes.c_float()
+            # 
+            PDFIUM.FPDFPage_GetCropBox(page,
+                    ctypes.byref(left), ctypes.byref(bottom), 
+                    ctypes.byref(right), ctypes.byref(top)
+                )
+            dx = left.value
+            dy = top.value
+            # 
+            annotCnt = PDFIUM.FPDFPage_GetAnnotCount(page)
+            for i in range(annotCnt):
+                annot = PDFIUM.FPDFPage_GetAnnot(page, i)
+                annotType = PDFIUM.FPDFAnnot_GetSubtype(annot)
+                if annotType == PDFIUM.FPDF_ANNOT_HIGHLIGHT or annotType == PDFIUM.FPDF_ANNOT_SQUARE:
+                    pdf_rect = PDFIUM.FS_RECTF()
+                    PDFIUM.FPDFAnnot_GetRect(annot, ctypes.byref(pdf_rect))
+                    # change to image coordinate
+                    x = pdf_rect.left - dx
+                    y = dy - pdf_rect.top if dy > 0 else page_height - pdf_rect.top
+                    rect = [x, y, pdf_rect.right - pdf_rect.left, pdf_rect.top - pdf_rect.bottom]
+                    # 
+                    annot_objects.append([rect]) # TODO
+                else:
+                    pass
+                PDFIUM.FPDFPage_CloseAnnot(annot)
+            # 
+            PDFIUM.FPDF_ClosePage(page)
+        elif PDF_BACKEND == 'POPPLER':
+            # Not implemented
+            pass
+        elif PDF_BACKEND == 'MUPDF':
+            # Not implemented
+            pass
+        return annot_objects
+
     def receive_commands(self):
         # collect all commands in queue
         while True:
@@ -289,6 +456,21 @@ class PdfInternalWorker(Process):
                 page_no, dpi, roi, visible_regions =params
                 self.save_rendering_command(page_no, dpi, roi, visible_regions)
                 # debug('[RENDER] for ', self.filename)
+            elif command == 'TEXTOBJECTS':
+                page_no = params[0]
+                objects = self.get_text_objects(self.doc, page_no)
+                if len(objects) > 0:
+                    self.resultsQ.put(['TEXTOBJECTS_RES', self.filename, page_no, objects])
+            elif command == 'LINKOBJECTS':
+                page_no = params[0]
+                objects = self.get_link_objects(self.doc, page_no)
+                if len(objects) > 0:
+                    self.resultsQ.put(['LINKOBJECTS_RES', self.filename, page_no, objects])
+            elif command == 'ANNOTOBJECTS':
+                page_no = params[0]
+                objects = self.get_annot_objects(self.doc, page_no)
+                if len(objects) > 0:
+                    self.resultsQ.put(['ANNOTOBJECTS_RES', self.filename, page_no, objects])
             elif command == 'STOP':
                 self.exit_flag = True
                 # debug('[STOP] for ', self.filename)
@@ -457,6 +639,9 @@ class PdfWorker(QtCore.QObject):
     pageSizesReceived = QtCore.pyqtSignal(str, list)
     bookmarksReceived = QtCore.pyqtSignal(str, list)
     renderedImageReceived = QtCore.pyqtSignal(str, int, float, QtCore.QRectF, QtGui.QImage)
+    textObjectsReceived = QtCore.pyqtSignal(str, int, list)
+    linkObjectsReceived = QtCore.pyqtSignal(str, int, list)
+    annotObjectsReceived = QtCore.pyqtSignal(str, int, list)
     # 
     def __init__(self):
         super(PdfWorker, self).__init__()
@@ -482,8 +667,17 @@ class PdfWorker(QtCore.QObject):
     def requestGetBookmarks(self):
         self.commandQ.put(['TOC', [None]])
         
-    def requestRender(self, page_no, dpi, roi, visible_regions):
+    def requestRenderPage(self, page_no, dpi, roi, visible_regions):
         self.commandQ.put(['RENDER', [page_no, dpi, roi, visible_regions]])
+
+    def requestGetTextObjects(self, page_no):
+        self.commandQ.put(['TEXTOBJECTS', [page_no]])
+
+    def requestGetLinkObjects(self, page_no):
+        self.commandQ.put(['LINKOBJECTS', [page_no]])
+
+    def requestGetAnnotationObjects(self, page_no):
+        self.commandQ.put(['ANNOTOBJECTS', [page_no]])
 
     def stop(self):
         self.commandQ.put(['STOP', []])
@@ -515,6 +709,15 @@ class PdfWorker(QtCore.QObject):
                 image = QtGui.QImageReader(img_buffer).read()
                 # 
                 self.renderedImageReceived.emit(filename, page_no, dpi, roi, image)
+            elif message == 'TEXTOBJECTS_RES':
+                page_no, objects = item[2:]
+                self.textObjectsReceived.emit(filename, page_no, objects)
+            elif message == 'LINKOBJECTS_RES':
+                page_no, objects = item[2:]
+                self.linkObjectsReceived.emit(filename, page_no, objects)
+            elif message == 'ANNOTOBJECTS_RES':
+                page_no, objects = item[2:]
+                self.annotObjectsReceived.emit(filename, page_no, objects)
             else:
                 assert(0)
     

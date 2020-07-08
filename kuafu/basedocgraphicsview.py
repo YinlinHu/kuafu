@@ -286,7 +286,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
                 prefixNum = page_no % self.render_num
                 render_idx = (prefixNum + pIdx) % self.render_num
 
-                self.render_list[render_idx].requestRender(page_no, dpi, roi, self.current_visible_regions)
+                self.render_list[render_idx].requestRenderPage(page_no, dpi, roi, self.current_visible_regions)
 
                 debug("<- Render %d Requested : <page:%d> <dpi:%.2f> <roi_raw: %.1f %.1f %.1f %.1f> <roi: %.1f %.1f %.1f %.1f>" % (
                     render_idx, page_no, dpi, 
@@ -326,7 +326,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         # roi = QtCore.QRect(1,1,containerSize.width()-2, containerSize.height()-2)
         # image = image.copy(roi)
 
-        self.page_items[page_no].addPixmap(QtGui.QPixmap.fromImage(image), roi.x(), roi.y())
+        self.page_items[page_no].addPixmap(QtGui.QPixmap.fromImage(image), roi.x(), roi.y(), dpi)
         
         if page_no in self.rendered_info:
             dpi0, roi_list = self.rendered_info[page_no]

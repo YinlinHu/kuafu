@@ -5,7 +5,7 @@ from PyQt5 import QtGui
 from basedocgraphicsview import BaseDocGraphicsView
 
 class DocGraphicsView(BaseDocGraphicsView):
-    def __init__(self, parent, render_num=1):
+    def __init__(self, parent, render_num=2):
         super(DocGraphicsView, self).__init__(parent, render_num)
 
         self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.white)) # set background

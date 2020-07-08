@@ -47,8 +47,12 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
         self.borderItem.setPen(pen)
         self.borderItem.setParentItem(self)
 
+        # text object
+        self.text_objects = None
+        self.link_objects = None
+
         # pixmaps
-        self.patch_basesize = 800
+        self.patch_basesize = 1000
         self.patch_rects = []
         self.patch_row_num = 0
         self.patch_col_num = 0
@@ -131,6 +135,12 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
         w = w_norm * width
         h = h_norm * height
         self.maskItem.setRect(x, y, w, h)
+
+    def setTextObjects(self, objects):
+        self.text_objects = objects
+
+    def setLinkObjects(self, objects):
+        self.link_objects = objects
 
     def updateTransientItems(self, visibleRect):
         for pid in self.cached_pixmaps:
@@ -281,7 +291,29 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
 
         return rects
 
-    def addPixmap(self, pixmap, dx, dy):
+    def addPixmap(self, pixmap, dx, dy, dpi):
+        # 
+        # debug
+        if False:
+            if self.text_objects:
+                painter = QtGui.QPainter()
+                painter.begin(pixmap)
+                for item in self.text_objects:
+                    ichar, rawRect = item
+                    ratio = dpi / 72.0
+                    rect = QtCore.QRect(rawRect[0]*ratio + dx, rawRect[1]*ratio + dy, rawRect[2]*ratio, rawRect[3]*ratio)
+                    painter.fillRect(rect, QtGui.QColor(255, 0, 0, 100))
+                painter.end()
+            if self.link_objects:
+                painter = QtGui.QPainter()
+                painter.begin(pixmap)
+                for item in self.link_objects:
+                    dest_pg_no, rawRect = item
+                    ratio = dpi / 72.0
+                    rect = QtCore.QRect(rawRect[0]*ratio + dx, rawRect[1]*ratio + dy, rawRect[2]*ratio, rawRect[3]*ratio)
+                    painter.fillRect(rect, QtGui.QColor(0, 255, 0, 100))
+                painter.end()
+        # 
         item = QtWidgets.QGraphicsPixmapItem(pixmap, parent=self)
         item.setOffset(dx, dy)
         item.setZValue(2)

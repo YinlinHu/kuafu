@@ -36,6 +36,9 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.pdfInfoReader = PdfWorker()
         self.pdfInfoReader.pageSizesReceived.connect(self.onPageSizesReceived)
         self.pdfInfoReader.bookmarksReceived.connect(self.onBookmarksReceived)
+        self.pdfInfoReader.textObjectsReceived.connect(self.onTextObjectsReceived)
+        self.pdfInfoReader.linkObjectsReceived.connect(self.onLinkObjectsReceived)
+        self.pdfInfoReader.annotObjectsReceived.connect(self.onAnnotObjectsReceived)
 
         self.splitter_doc.setSizes([1, 0]) # the second view is folded by default
         self.splitter_doc.setCollapsible(0, False) 
@@ -105,7 +108,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.tocManager = TocManager(self.tocButton_1)
         self.tocManager.tocIndexChanged.connect(self.onTocIndexChanged)
         self.current_page_idx = -1
-        self.pageCounts = 0
+        self.pageTextLoadedFlag = []
 
     def setFileList(self, filename):
         # remove all file list first
@@ -155,6 +158,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     def loadDocument(self, filename, screen_dpi):
         viewStatus = self.loadDocumentViewStatus(filename)
         self.viewStatus = [viewStatus, filename]
+        self.pageTextLoadedFlag = []
         self.pdfInfoReader.setDocument(filename)
         self.pdfInfoReader.requestGetPageSizes()
         self.pdfInfoReader.requestGetBookmarks()
@@ -164,6 +168,12 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         viewStatus, vfilename = self.viewStatus
         if filename != vfilename:
             return
+        # 
+        page_counts = len(pages_size_inch)
+        self.pageTextLoadedFlag = [False] * page_counts
+        # for i in range(page_counts):
+        #     self.pdfInfoReader.requestGetAnnotationObjects(i)
+        # 
         status = viewStatus['docView1'] if viewStatus else None
         self.doc_graphicsview_1.setDocument(self.filename, self.screen_dpi, pages_size_inch, status)
         status = viewStatus['docView2'] if viewStatus else None
@@ -182,24 +192,61 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.tocManager.setToc(toc)
         self.tocManager.update(self.current_page_idx)
 
+    def onTextObjectsReceived(self, filename, page_no, text_objects):
+        if not os.path.samefile(filename, self.filename):
+            return
+
+        # TODO
+        return
+
+        self.doc_graphicsview_1.initializePage(page_no)
+        self.doc_graphicsview_1.page_items[page_no].setTextObjects(text_objects)
+        # 
+        self.doc_graphicsview_2.initializePage(page_no)
+        self.doc_graphicsview_2.page_items[page_no].setTextObjects(text_objects)
+
+    def onLinkObjectsReceived(self, filename, page_no, link_objects):
+        if not os.path.samefile(filename, self.filename):
+            return
+
+        # TODO
+        return
+
+        self.doc_graphicsview_1.initializePage(page_no)
+        self.doc_graphicsview_1.page_items[page_no].setLinkObjects(link_objects)
+        # 
+        self.doc_graphicsview_2.initializePage(page_no)
+        self.doc_graphicsview_2.page_items[page_no].setLinkObjects(link_objects)
+
+    def onAnnotObjectsReceived(self, filename, page_no, annot_objects):
+        if not os.path.samefile(filename, self.filename):
+            return
+        # 
+        print('onAnnotObjectsReceived (page %d: %d)' % (page_no, len(annot_objects)))
+        pass
+
     def onTocIndexChanged(self, page_no):
         debug("onTocIndexChanged: %d" % page_no)
         self.current_graphicsview.gotoPage(page_no)
 
-    def onThumbLoadFinished(self):
-        # debug("onThumbLoadFinished")
-        pass
-
     def onDocViewportChanged(self, filename, page_counts, visible_regions):
         # debug("Doc viewport changed: ", visible_regions)
+        if not os.path.samefile(filename, self.filename):
+            return
+
         self.thumb_graphicsview.highlightVisibleMasks(filename, visible_regions)
         # 
         self.current_page_idx = next(iter(visible_regions)) # fetch first key
-        self.pageCounts = page_counts
         self.tocManager.update(self.current_page_idx)
         # 
         self.lineEdit_pageNo.setPageInfo(self.current_page_idx+1, page_counts)
         self.label_pageCount.setText(" %d " % page_counts)
+        # 
+        for page_no in visible_regions:
+            if not self.pageTextLoadedFlag[page_no]:
+                self.pageTextLoadedFlag[page_no] = True
+                self.pdfInfoReader.requestGetTextObjects(page_no)
+                self.pdfInfoReader.requestGetLinkObjects(page_no)
 
     def OnDoc1FocusIn(self):
         # debug("OnDoc1FocusIn")
