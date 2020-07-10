@@ -86,7 +86,7 @@ class TocManager(QtCore.QObject):
 
         # 
         if tocItemCnt > 0:
-            self.view.setAlternatingRowColors(True)
+            # self.view.setAlternatingRowColors(True)
             self.view.setHeaderHidden(True)
             self.view.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
             self.view.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)

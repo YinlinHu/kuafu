@@ -196,9 +196,6 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         if not os.path.samefile(filename, self.filename):
             return
 
-        # TODO
-        return
-
         self.doc_graphicsview_1.initializePage(page_no)
         self.doc_graphicsview_1.page_items[page_no].setTextObjects(text_objects)
         # 
@@ -208,9 +205,6 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
     def onLinkObjectsReceived(self, filename, page_no, link_objects):
         if not os.path.samefile(filename, self.filename):
             return
-
-        # TODO
-        return
 
         self.doc_graphicsview_1.initializePage(page_no)
         self.doc_graphicsview_1.page_items[page_no].setLinkObjects(link_objects)

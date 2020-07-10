@@ -294,19 +294,38 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
     def addPixmap(self, pixmap, dx, dy, dpi):
         # 
         # debug
-        if False:
+        # if False:
+        if True:
             if self.text_objects:
                 painter = QtGui.QPainter()
                 painter.begin(pixmap)
-                for item in self.text_objects:
-                    ichar, rawRect = item
-                    ratio = dpi / 72.0
-                    rect = QtCore.QRect(rawRect[0]*ratio + dx, rawRect[1]*ratio + dy, rawRect[2]*ratio, rawRect[3]*ratio)
-                    painter.fillRect(rect, QtGui.QColor(255, 0, 0, 100))
-                painter.end()
+                chars, char_rects, merged_rects = self.text_objects
+                if False:
+                # if True:
+                    pen = QtGui.QPen(QtGui.QColor(255, 0, 0, 255))
+                    pen.setWidth(1)
+                    painter.setPen(pen)
+                    for i in range(len(chars)):
+                        rawRect = char_rects[i]
+                        ratio = dpi / 72.0
+                        rect = QtCore.QRect(rawRect[0]*ratio + dx, rawRect[1]*ratio + dy, rawRect[2]*ratio, rawRect[3]*ratio)
+                        painter.drawRect(rect)
+                # 
+                # if False:
+                if True:
+                    pen = QtGui.QPen(QtGui.QColor(0, 0, 255, 255))
+                    pen.setWidth(1)
+                    painter.setPen(pen)
+                    for i in range(len(merged_rects)):
+                        rawRect, startIdx, endIdx = merged_rects[i]
+                        ratio = dpi / 72.0
+                        rect = QtCore.QRect(rawRect[0]*ratio + dx, rawRect[1]*ratio + dy, rawRect[2]*ratio, rawRect[3]*ratio)
+                        painter.drawRect(rect)
+                    painter.end()
             if self.link_objects:
                 painter = QtGui.QPainter()
                 painter.begin(pixmap)
+                # 
                 for item in self.link_objects:
                     dest_pg_no, rawRect = item
                     ratio = dpi / 72.0

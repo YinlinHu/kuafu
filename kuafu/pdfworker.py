@@ -264,25 +264,156 @@ class PdfInternalWorker(Process):
         elif PDF_BACKEND == 'MUPDF':
             return self.doc.getToC(simple=False)
 
+    def _get_page_crop_box_pdfium(self, page):
+        # in PDF coordinate
+        # 
+        # get crop box first
+        left1 = ctypes.c_float()
+        bottom1 = ctypes.c_float()
+        right1 = ctypes.c_float()
+        top1 = ctypes.c_float()
+        PDFIUM.FPDFPage_GetCropBox(page,
+                ctypes.byref(left1), ctypes.byref(bottom1), 
+                ctypes.byref(right1), ctypes.byref(top1)
+            )
+        # get media box
+        left2 = ctypes.c_float()
+        bottom2 = ctypes.c_float()
+        right2 = ctypes.c_float()
+        top2 = ctypes.c_float()
+        PDFIUM.FPDFPage_GetMediaBox(page,
+            ctypes.byref(left2), ctypes.byref(bottom2), 
+            ctypes.byref(right2), ctypes.byref(top2)
+        )
+        # 
+        cropValid = (right1.value > 0 and top1.value > 0)
+        mediaValid = (right2.value > 0 and top2.value > 0)
+        if cropValid and mediaValid:
+            # get the intersection of them
+            rect = [
+                max(left1.value, left2.value), 
+                min(top1.value, top2.value), 
+                min(right1.value, right2.value), 
+                max(bottom1.value, bottom2.value)
+            ]
+        elif mediaValid:
+            # the crop box is invalid but the media box is valid
+            rect = [left2.value, top2.value, right2.value, bottom2.value]
+        else:
+            # if both the crop box and the media box are invalid, 
+            # use page width and height information
+            # in this case, the rotation flag should be considered
+            rotation = PDFIUM.FPDFPage_GetRotation(page)
+            page_width = PDFIUM.FPDF_GetPageWidth(page)
+            page_height = PDFIUM.FPDF_GetPageHeight(page)
+            # No rotation or Rotated 180 degrees clockwise
+            if rotation == 0 or rotation == 2:
+                rect = [0, page_height, page_width, 0]
+            # Rotated 90 degrees clockwise or Rotated 270 degrees clockwise
+            elif rotation == 1 or rotation == 3:
+                rect = [0, page_width, page_height, 0]
+        # 
+        return rect
+
+    def _rect_transform_pdfium(self, rotation, crop_box, pdf_rect):
+        # transform rect to image coordinate in format [x,y,w,h]
+        # crop_box and pdf_rect are in PDF coordinate
+        left, top, right, bottom = pdf_rect
+        crop_left, crop_top, crop_right, crop_bottom = crop_box
+        # 
+        # change to image coordiate first
+        x = left - crop_left
+        y = crop_top - top
+        w = right - left
+        h = top - bottom
+        rect = [x, y, w, h]
+        # debug (without considering rotation flag, and return directly)
+        # return rect
+        # 
+        # rotate according to rotation flag
+        if rotation == 0: # No rotation.
+            pass
+        elif rotation == 1: # Rotated 90 degrees clockwise.
+            page_width = crop_top - crop_bottom
+            newx = page_width - (y + h)
+            newy = x
+            neww = h
+            newh = w
+            rect = [newx, newy, neww, newh]
+        elif rotation == 2: # Rotated 180 degrees clockwise.
+            page_width = crop_right - crop_left
+            page_height = crop_top - crop_bottom
+            newx = page_width - (x + w)
+            newy = page_height - (y + h)
+            neww = w
+            newh = h
+            rect = [newx, newy, neww, newh]
+        elif rotation == 3: # Rotated 270 degrees clockwise.
+            page_height = crop_right - crop_left
+            newx = y
+            newy = page_height - (x + w)
+            neww = h
+            newh = w
+            rect = [newx, newy, neww, newh]
+        # 
+        return rect
+
+    def _merge_char_rects(self, char_rects, chars, font_weights):
+        # assume no rotation, and the rects are in PDF coordinate (Y is different from common image coordinate)
+        charCnt = len(char_rects)
+        assert(len(chars) == charCnt)
+        assert(len(font_weights) == charCnt)
+        if charCnt == 0:
+            return []
+        # 
+        rects = []
+        endFlag = True
+        startIdx = 0
+        current_rect = [0, 0, 0, 0] # left, top, right, bottom
+        for i in range(charCnt):
+            left, top, right, bottom = char_rects[i]
+            # 
+            if i == 0:
+                current_rect = [left, top, right, bottom]
+                continue
+            # 
+            # check if we need to end constructing of the current rect
+            # \x02 is the Hyphen '-'
+            if chars[i-1] == '\n' or chars[i-1] == '\x02':
+                endFlag = True
+            else:
+                endFlag = False
+            # 
+            if endFlag:
+                rects.append([current_rect, startIdx, i])  # save the current rect and start a new one
+                startIdx = i
+                current_rect = [left, top, right, bottom]
+            else:
+                # append to the current rect
+                new_left = min(current_rect[0], left)
+                new_top =  max(current_rect[1], top)
+                new_right = max(current_rect[2], right)
+                new_bottom = min(current_rect[3], bottom)
+                current_rect = [new_left, new_top, new_right, new_bottom]
+            # 
+            if i == (charCnt - 1): # save the last one
+                rects.append([current_rect, startIdx, charCnt])
+        # 
+        return rects
+
     def get_text_objects(self, doc, page_no):
         text_objects = []
+        chars = []
+        fontweights = []
+        char_rects = []
+        merged_rects = []
         if PDF_BACKEND == 'PDFIUM':
             page = PDFIUM.FPDF_LoadPage(doc, page_no)
-            page_height = PDFIUM.FPDF_GetPageHeightF(page)
             textpage = PDFIUM.FPDFText_LoadPage(page)
             charCnt = PDFIUM.FPDFText_CountChars(textpage)
             # 
-            left = ctypes.c_float()
-            bottom = ctypes.c_float()
-            right = ctypes.c_float()
-            top = ctypes.c_float()
-            # 
-            PDFIUM.FPDFPage_GetCropBox(page,
-                    ctypes.byref(left), ctypes.byref(bottom), 
-                    ctypes.byref(right), ctypes.byref(top)
-                )
-            dx = left.value
-            dy = top.value
+            crop_box = self._get_page_crop_box_pdfium(page)
+            rotation = PDFIUM.FPDFPage_GetRotation(page)
             # 
             for i in range(charCnt):
                 iChar = chr(PDFIUM.FPDFText_GetUnicode(textpage, i))
@@ -295,12 +426,20 @@ class PdfInternalWorker(Process):
                     ctypes.byref(left), ctypes.byref(right), 
                     ctypes.byref(bottom), ctypes.byref(top)
                 )
-                # change to image coordinate
-                x = left.value - dx
-                y = dy - top.value if dy > 0 else page_height - top.value
-                rect = [x, y, right.value - left.value, top.value - bottom.value]
-                # print(iChar, rect)
-                text_objects.append([iChar, rect])
+                ftWeights = PDFIUM.FPDFText_GetFontWeight(textpage, i)
+                # print('Font weights for %s : %d' % (iChar, ftWeights))
+                chars.append(iChar)
+                fontweights.append(ftWeights)
+                char_rects.append([left.value, top.value, right.value, bottom.value])
+            merged_rects = self._merge_char_rects(char_rects, chars, fontweights)
+            # 
+            # transform rects to image coordinate
+            for i in range(charCnt):
+                char_rects[i] = self._rect_transform_pdfium(rotation, crop_box, char_rects[i])
+            for i in range(len(merged_rects)):
+                merged_rects[i][0] = self._rect_transform_pdfium(rotation, crop_box, merged_rects[i][0])
+            # 
+            text_objects = [chars, char_rects, merged_rects]
             PDFIUM.FPDFText_ClosePage(textpage)
             PDFIUM.FPDF_ClosePage(page)
         elif PDF_BACKEND == 'POPPLER':
@@ -346,19 +485,9 @@ class PdfInternalWorker(Process):
         link_objects = []
         if PDF_BACKEND == 'PDFIUM':
             page = PDFIUM.FPDF_LoadPage(doc, page_no)
-            page_height = PDFIUM.FPDF_GetPageHeightF(page)
             # 
-            left = ctypes.c_float()
-            bottom = ctypes.c_float()
-            right = ctypes.c_float()
-            top = ctypes.c_float()
-            # 
-            PDFIUM.FPDFPage_GetCropBox(page,
-                    ctypes.byref(left), ctypes.byref(bottom), 
-                    ctypes.byref(right), ctypes.byref(top)
-                )
-            dx = left.value
-            dy = top.value
+            crop_box = self._get_page_crop_box_pdfium(page)
+            rotation = PDFIUM.FPDFPage_GetRotation(page)
             # 
             start_pos = ctypes.c_int()
             start_pos.value = 0
@@ -369,10 +498,10 @@ class PdfInternalWorker(Process):
                 dest_pg_no = PDFIUM.FPDFDest_GetDestPageIndex(doc, dest)
                 pdf_rect = PDFIUM.FS_RECTF()
                 PDFIUM.FPDFLink_GetAnnotRect(link_annot, ctypes.byref(pdf_rect))
-                # change to image coordinate
-                x = pdf_rect.left - dx
-                y = dy - pdf_rect.top if dy > 0 else page_height - pdf_rect.top
-                rect = [x, y, pdf_rect.right - pdf_rect.left, pdf_rect.top - pdf_rect.bottom]
+                rect = self._rect_transform_pdfium(
+                    rotation, crop_box,
+                    [pdf_rect.left, pdf_rect.top, pdf_rect.right, pdf_rect.bottom]
+                )
                 # print(dest_pg_no, rect)
                 link_objects.append([dest_pg_no, rect])
                 # 
@@ -393,17 +522,9 @@ class PdfInternalWorker(Process):
             page = PDFIUM.FPDF_LoadPage(doc, page_no)
             page_height = PDFIUM.FPDF_GetPageHeightF(page)
             # 
-            left = ctypes.c_float()
-            bottom = ctypes.c_float()
-            right = ctypes.c_float()
-            top = ctypes.c_float()
-            # 
-            PDFIUM.FPDFPage_GetCropBox(page,
-                    ctypes.byref(left), ctypes.byref(bottom), 
-                    ctypes.byref(right), ctypes.byref(top)
-                )
-            dx = left.value
-            dy = top.value
+            crop_box = self._get_page_crop_box_pdfium(page)
+            dx = crop_box[0]
+            dy = crop_box[1]
             # 
             annotCnt = PDFIUM.FPDFPage_GetAnnotCount(page)
             for i in range(annotCnt):
