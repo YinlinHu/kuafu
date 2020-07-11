@@ -30,6 +30,9 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.current_cursor_y = 0
         self.isMousePressed = False
         self.isMouseOver = False
+        self.hScrollPosWhenClicked = None
+        self.vScrollPosWhenClicked = None
+        self.clickedPos = None
 
         self.setScene(self.scene)
 
@@ -77,7 +80,7 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.setViewportUpdateMode(QtWidgets.QGraphicsView.FullViewportUpdate)
         # self.setViewportUpdateMode(QtWidgets.QGraphicsView.SmartViewportUpdate)
         # self.setViewportUpdateMode(QtWidgets.QGraphicsView.MinimalViewportUpdate)
-        self.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
+        self.setDragMode(QtWidgets.QGraphicsView.NoDrag) # disable the default dragger
 
         self.setMouseTracking(True)
 
@@ -570,6 +573,9 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
     def mousePressEvent(self, ev):
         # debug('mousePressEvent in BaseDocGraphicsView')
         self.isMousePressed = True
+        self.hScrollPosWhenClicked = self.horizontalScrollBar().value()
+        self.vScrollPosWhenClicked = self.verticalScrollBar().value()
+        self.clickedPos = ev.globalPos()
         return super().mousePressEvent(ev)
 
     def mouseReleaseEvent(self, ev):

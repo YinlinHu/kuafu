@@ -291,6 +291,31 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
 
         return rects
 
+    def textUnder(self, x, y):
+        # the x and y are in the raw image coordinate without any scaling
+        if self.text_objects:
+            chars, char_rects, merged_rects = self.text_objects
+            for i in range(len(merged_rects)):
+                rawRect, startIdx, endIdx = merged_rects[i]
+            # for i in range(len(char_rects)):
+            #     rawRect = char_rects[i]
+                rect = QtCore.QRect(rawRect[0], rawRect[1], rawRect[2], rawRect[3])
+                if rect.contains(x, y):
+                    # for idx in range(startIdx, endIdx):
+                        # pass
+                    return True
+        return False
+
+    def linkUnder(self, x, y):
+        # the x and y are in the raw image coordinate without any scaling
+        if self.link_objects:
+            for item in self.link_objects:
+                dest_pg_no, rawRect = item
+                rect = QtCore.QRect(rawRect[0], rawRect[1], rawRect[2], rawRect[3])
+                if rect.contains(x, y):
+                    return dest_pg_no
+        return None
+
     def addPixmap(self, pixmap, dx, dy, dpi):
         # 
         # debug

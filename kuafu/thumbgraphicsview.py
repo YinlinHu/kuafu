@@ -14,8 +14,6 @@ class ThumbGraphicsView(BaseDocGraphicsView):
 
         self.scene.setBackgroundBrush(QtGui.QBrush(QtCore.Qt.white)) # set background
 
-        self.setDragMode(QtWidgets.QGraphicsView.NoDrag) # disable the default dragger
-
     def initializePage(self, page_no):
         super(ThumbGraphicsView, self).initializePage(page_no) # call parent's implementation
         # add some more
