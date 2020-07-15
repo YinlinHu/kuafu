@@ -6,7 +6,9 @@ from basedocgraphicsview import BaseDocGraphicsView
 from utils import debug
 
 class ThumbGraphicsView(BaseDocGraphicsView):
+    pageRelocationStarted = QtCore.pyqtSignal(int, float, float)
     pageRelocationRequest = QtCore.pyqtSignal(int, float, float)
+    pageRelocationFinished = QtCore.pyqtSignal()
     zoomRequest = QtCore.pyqtSignal(bool, int, float, float)
 
     def __init__(self, parent, render_num=2):
@@ -57,7 +59,7 @@ class ThumbGraphicsView(BaseDocGraphicsView):
             return
         self.setCursor(QtCore.Qt.ClosedHandCursor)
         page_no, x_ratio, y_ratio, _, _ = self.getPageByPos(ev.pos().x(), ev.pos().y())
-        self.pageRelocationRequest.emit(page_no, x_ratio, y_ratio)
+        self.pageRelocationStarted.emit(page_no, x_ratio, y_ratio)
         return super().mousePressEvent(ev)
 
     def mouseReleaseEvent(self, ev):
@@ -65,6 +67,7 @@ class ThumbGraphicsView(BaseDocGraphicsView):
         if self.page_counts == 0:
             return
         self.setCursor(QtCore.Qt.ArrowCursor)
+        self.pageRelocationFinished.emit()
         return super().mouseReleaseEvent(ev)
 
     def mouseMoveEvent(self, ev):

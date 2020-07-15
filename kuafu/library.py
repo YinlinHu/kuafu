@@ -73,7 +73,9 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
 
         self.thumb_graphicsview.viewColumnChanged.connect(self.onThumbViewColumnChanged)
         self.thumb_graphicsview.emptyLeadingPageChanged.connect(self.onThumbEmptyLeadingPageChanged)
+        self.thumb_graphicsview.pageRelocationStarted.connect(self.onThumbPageRelocationStarted)
         self.thumb_graphicsview.pageRelocationRequest.connect(self.onThumbPageRelocationRequest)
+        self.thumb_graphicsview.pageRelocationFinished.connect(self.onThumbPageRelocationFinished)
         self.thumb_graphicsview.zoomRequest.connect(self.onThumbZoomRequest)
 
         self.lineEdit_pageNo.gotoPageTrigger.connect(self.onGotoPageTrigger)
@@ -259,10 +261,17 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.gotoPage(page_no)
         self.lineEdit_pageNo.clearFocus()
 
+    def onThumbPageRelocationStarted(self, page_no, x_ratio, y_ratio):
+        self.current_graphicsview.saveCurrentView()
+        self.onThumbPageRelocationRequest(page_no, x_ratio, y_ratio)
+        
     def onThumbPageRelocationRequest(self, page_no, x_ratio, y_ratio):
         # debug("onPageRelocationRequest: <%d> (%.2f, %.2f)" % (page_no, x_ratio, y_ratio))
         viewRect = self.current_graphicsview.viewport()
         self.current_graphicsview.viewAtPageAnchor([page_no, x_ratio, y_ratio, viewRect.width()/2, viewRect.height()/2])
+
+    def onThumbPageRelocationFinished(self):
+        self.current_graphicsview.saveCurrentView()
 
     def onThumbZoomRequest(self, zoomInFlag, page_no, x_ratio, y_ratio):
         # debug("onThumbZoomRequest: %d, <%d> (%.2f, %.2f)" % (zoomInFlag, page_no, x_ratio, y_ratio))
