@@ -224,7 +224,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
 
     def onTocIndexChanged(self, page_no):
         debug("onTocIndexChanged: %d" % page_no)
-        self.current_graphicsview.gotoPage(page_no)
+        self.gotoPage(page_no)
 
     def onDocViewportChanged(self, filename, page_counts, visible_regions):
         # debug("Doc viewport changed: ", visible_regions)
