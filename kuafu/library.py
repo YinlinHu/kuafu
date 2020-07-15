@@ -64,12 +64,14 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.doc_graphicsview_1.zoomRatioChanged.connect(self.onZoomRatioChanged)
         self.doc_graphicsview_1.viewportChanged.connect(self.onDocViewportChanged)
         self.doc_graphicsview_1.focusIn.connect(self.OnDoc1FocusIn)
+        self.doc_graphicsview_1.pageRelocationRequest.connect(self.onDoc1RelocationRequest)
 
         self.doc_graphicsview_2.viewColumnChanged.connect(self.onViewColumnChanged)
         self.doc_graphicsview_2.emptyLeadingPageChanged.connect(self.onEmptyLeadingPageChanged)
         self.doc_graphicsview_2.zoomRatioChanged.connect(self.onZoomRatioChanged)
         self.doc_graphicsview_2.viewportChanged.connect(self.onDocViewportChanged)
         self.doc_graphicsview_2.focusIn.connect(self.OnDoc2FocusIn)
+        self.doc_graphicsview_2.pageRelocationRequest.connect(self.onDoc2RelocationRequest)
 
         self.thumb_graphicsview.viewColumnChanged.connect(self.onThumbViewColumnChanged)
         self.thumb_graphicsview.emptyLeadingPageChanged.connect(self.onThumbEmptyLeadingPageChanged)
@@ -256,6 +258,18 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         # debug("OnDoc2FocusIn")
         self.current_graphicsview = self.doc_graphicsview_2
         self.current_graphicsview.refreshSignals()
+
+    def onDoc1RelocationRequest(self, page_no, x_ratio, y_ratio):
+        viewRect = self.doc_graphicsview_2.viewport()
+        area = viewRect.width() * viewRect.height()
+        if area == 0:
+            self.splitter_doc.setSizes([1, 1]) # make the second view visible
+        self.doc_graphicsview_2.saveCurrentView()
+        self.doc_graphicsview_2.viewAtPageAnchor([page_no, x_ratio, y_ratio, 0, 0])
+
+    def onDoc2RelocationRequest(self, page_no, x_ratio, y_ratio):
+        self.doc_graphicsview_1.saveCurrentView()
+        self.doc_graphicsview_1.viewAtPageAnchor([page_no, x_ratio, y_ratio, 0, 0])
 
     def onGotoPageTrigger(self, page_no):
         self.gotoPage(page_no)

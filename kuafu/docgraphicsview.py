@@ -7,6 +7,8 @@ from page import PageGraphicsItem
 from utils import debug
 
 class DocGraphicsView(BaseDocGraphicsView):
+    pageRelocationRequest = QtCore.pyqtSignal(int, float, float)
+
     def __init__(self, parent, render_num=2):
         super(DocGraphicsView, self).__init__(parent, render_num)
 
@@ -76,11 +78,14 @@ class DocGraphicsView(BaseDocGraphicsView):
         return super().mouseDoubleClickEvent(ev)
 
     def mousePressEvent(self, ev):
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
         dest = self.linkUnder(ev.x(), ev.y())
         if dest:
-            # print(dest)
-            self.saveCurrentView()
-            self.gotoPage(dest)
+            if modifiers == QtCore.Qt.ControlModifier:
+                self.pageRelocationRequest.emit(dest, 0, 0)
+            else:
+                self.saveCurrentView()
+                self.gotoPage(dest)
         elif self.textUnder(ev.x(), ev.y()):
             self.textSelectionMode = True
         return super(DocGraphicsView, self).mousePressEvent(ev)
