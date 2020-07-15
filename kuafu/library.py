@@ -43,6 +43,9 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         self.splitter_doc.setSizes([1, 0]) # the second view is folded by default
         self.splitter_doc.setCollapsible(0, False) 
 
+        self.pushButton_prev.clicked.connect(self.onPrevViewClicked)
+        self.pushButton_next.clicked.connect(self.onNextViewClicked)
+
         self.pushButton_oneColumn.clicked.connect(self.onOneColumnClicked)
         self.pushButton_twoColumn.clicked.connect(self.onTwoColumnClicked)
         self.pushButton_fourColumn.clicked.connect(self.onFourColumnClicked)
@@ -239,7 +242,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
         for page_no in visible_regions:
             if not self.pageTextLoadedFlag[page_no]:
                 self.pageTextLoadedFlag[page_no] = True
-                self.pdfInfoReader.requestGetTextObjects(page_no)
+                # self.pdfInfoReader.requestGetTextObjects(page_no)
                 self.pdfInfoReader.requestGetLinkObjects(page_no)
 
     def OnDoc1FocusIn(self):
@@ -309,6 +312,11 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
             self.pushButton_zoomFitWidth.setChecked(False)
             self.showStatusRequested.emit("Zoom to %d%%" % int(zoomRatio * 100))
 
+    def onPrevViewClicked(self):
+        self.current_graphicsview.gotoPrevView()
+
+    def onNextViewClicked(self):
+        self.current_graphicsview.gotoNextView()
 
     def onOneColumnClicked(self):
         self.current_graphicsview.setColumnNumber(1)
@@ -383,6 +391,7 @@ class LibraryView(QtWidgets.QWidget, Ui_librarywidget):
                 parent_item.appendRow([item, dateItem])
 
     def gotoPage(self, pg_no):
+        self.current_graphicsview.saveCurrentView()
         self.current_graphicsview.gotoPage(pg_no)
 
     def zoomIn(self):

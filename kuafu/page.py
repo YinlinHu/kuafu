@@ -319,8 +319,8 @@ class PageGraphicsItem(QtWidgets.QGraphicsRectItem):
     def addPixmap(self, pixmap, dx, dy, dpi):
         # 
         # debug
-        # if False:
-        if True:
+        if False:
+        # if True:
             if self.text_objects:
                 painter = QtGui.QPainter()
                 painter.begin(pixmap)

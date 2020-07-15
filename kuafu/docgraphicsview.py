@@ -78,7 +78,8 @@ class DocGraphicsView(BaseDocGraphicsView):
     def mousePressEvent(self, ev):
         dest = self.linkUnder(ev.x(), ev.y())
         if dest:
-            print(dest)
+            # print(dest)
+            self.saveCurrentView()
             self.gotoPage(dest)
         elif self.textUnder(ev.x(), ev.y()):
             self.textSelectionMode = True

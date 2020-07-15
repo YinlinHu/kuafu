@@ -56,6 +56,9 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.current_rendering_dpi = []
         self.current_highlighted_pages = []
 
+        self.historyViews = []
+        self.currentViewIdx = 0
+        
         for i in range(self.render_num):
             tmpWorker = PdfWorker()
             tmpWorker.renderedImageReceived.connect(self.onRenderedImageReceived)
@@ -129,6 +132,8 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.current_rendering_dpi = []
         self.rendered_info = {}
         self.current_highlighted_pages = []
+        self.historyViews = []
+        self.currentViewIdx = 0
         self.view_column_count = 1
         self.leading_empty_pages = 0
         self.fitwidth_flag = True
@@ -163,12 +168,13 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         #     self.page_items[i] = pageItem
 
         self.setColumnNumber(min(self.view_column_count, self.page_counts))
-        # 
         self.redrawPages(relocationInitInfo)
-        # 
+        self.saveCurrentView()
         self.refreshSignals()
 
     def onViewportChanged(self):
+        self.currentViewChanged = True
+        # 
         self.renderCurrentVisiblePages()
         # 
         # prepare normalized visible regions
@@ -515,17 +521,66 @@ class BaseDocGraphicsView(QtWidgets.QGraphicsView):
         self.redrawPages()
         self.zoomRatioChanged.emit(0)
 
-    def goPrevPage(self):
-        if len(self.current_visible_regions) == 0:
-            return
-        curent_page_idx = next(iter(self.current_visible_regions)) # first key as the current
-        self.gotoPage(curent_page_idx - self.view_column_count)
+    def _isSameView(self, view1, view2):
+        page_no_1, x_ratio_1, y_ratio_1, view_x_1, view_y_1 = view1
+        page_no_2, x_ratio_2, y_ratio_2, view_x_2, view_y_2 = view2
+        if page_no_1 == page_no_2 \
+            and abs(x_ratio_1 - x_ratio_2) < 1e-3 \
+            and abs(y_ratio_1 - y_ratio_2) < 1e-3:
+            return True
+        else:
+            return False
 
-    def goNextPage(self):
-        if len(self.current_visible_regions) == 0:
+    def gotoPrevView(self):
+        viewCnt = len(self.historyViews)
+        if viewCnt == 0:
             return
-        curent_page_idx = next(iter(self.current_visible_regions)) # first key as the current
-        self.gotoPage(curent_page_idx + self.view_column_count)
+        view = self.getPageByPos(0, 0)
+        if self._isSameView(view, self.historyViews[self.currentViewIdx]):
+            candiIdx = self.currentViewIdx - 1
+            if candiIdx < 0:
+                return
+            self.currentViewIdx = candiIdx
+        else:
+            part1 = self.historyViews[0:self.currentViewIdx + 1]
+            part2 = self.historyViews[self.currentViewIdx + 1:]
+            self.historyViews = part1 + [view]
+        self.redrawPages(self.historyViews[self.currentViewIdx])
+        # 
+        # print('history views: ', self.currentViewIdx, self.historyViews)
+
+    def gotoNextView(self):
+        viewCnt = len(self.historyViews)
+        if viewCnt == 0 or self.currentViewIdx == viewCnt - 1:
+            return
+        # 
+        view = self.getPageByPos(0, 0)
+        if self._isSameView(view, self.historyViews[self.currentViewIdx]):
+            self.currentViewIdx += 1
+            self.redrawPages(self.historyViews[self.currentViewIdx])
+        else:
+            part1 = self.historyViews[0:self.currentViewIdx + 1]
+            part2 = self.historyViews[self.currentViewIdx + 1:]
+            self.historyViews = part1
+        # 
+        # print('history views: ', self.currentViewIdx, self.historyViews)
+
+    def saveCurrentView(self):
+        view = self.getPageByPos(0, 0)
+        viewCnt = len(self.historyViews)
+        if viewCnt == 0:
+            self.historyViews.append(view)
+            self.currentViewIdx = 0
+        else:
+            part1 = self.historyViews[0:self.currentViewIdx + 1]
+            part2 = self.historyViews[self.currentViewIdx + 1:]
+            if self._isSameView(view, self.historyViews[self.currentViewIdx]):
+                self.historyViews = part1
+            else:
+                self.historyViews = part1 + [view]
+                self.currentViewIdx += 1
+        # 
+        # print('saved history views: ', self.currentViewIdx, self.historyViews)
 
     def gotoPage(self, pg_no):
         # make the page as the first visible one (it can not guarantee for multi-column cases)
