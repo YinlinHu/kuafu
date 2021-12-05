@@ -19,9 +19,8 @@ PDF_BACKEND = 'PDFIUM'
 if PDF_BACKEND == 'PDFIUM':
     # follow https://github.com/BlockSigner/wowpng, and https://github.com/bblanchon/pdfium-binaries
     import ctypes
-    import pypdfium as PDFIUM
-    PDFIUM.FPDF_InitLibraryWithConfig(PDFIUM.FPDF_LIBRARY_CONFIG(2, None, None, 0))
-
+    import pypdfium2 as PDFIUM
+    
 elif PDF_BACKEND == 'POPPLER':
     from popplerqt5 import Poppler
 

@@ -1,1 +1,1 @@
-pypdfium
+pypdfium2
