@@ -213,28 +213,23 @@ class PdfInternalWorker(Process):
             nodes_queue = []
             #  
             # push children of the first level in queue in reverse order
-            childrens = []
             child_node = firstBookmark
             while child_node:
-                childrens.append(child_node)
+                nodes_queue.insert(0, (child_node, current_level))
                 child_node = PDFIUM.FPDFBookmark_GetNextSibling(self.doc, child_node)
-            for i in reversed(range(0, len(childrens))):
-                nodes_queue.append([childrens[i], current_level])
             # 
             while len(nodes_queue) > 0:
                 current_node, current_level = nodes_queue.pop(-1) # get the last one
                 # 
                 title, page_num, _ = self.get_toc_item_pdfium(self.doc, current_node)
-                toc_list.append([current_level, title, page_num, None])
+                toc_list.append( (current_level, title, page_num, None) )
                 # 
                 # push children in queue in reverse order
-                childrens = []
                 child_node = PDFIUM.FPDFBookmark_GetFirstChild(self.doc, current_node)
+                pos = len(nodes_queue)
                 while child_node:
-                    childrens.append(child_node)
+                    nodes_queue.insert(pos, (child_node, current_level + 1))
                     child_node = PDFIUM.FPDFBookmark_GetNextSibling(self.doc, child_node)
-                for i in reversed(range(0, len(childrens))):
-                    nodes_queue.append([childrens[i], current_level + 1])
                 # 
             return toc_list
         elif PDF_BACKEND == 'POPPLER':
